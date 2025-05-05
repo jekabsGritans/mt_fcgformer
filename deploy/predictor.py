@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
@@ -27,7 +28,7 @@ class Predictor:
         self.model.eval()
         self.model.requires_grad_(False)
 
-    def predict(self, spectrum: np.ndarray | torch.Tensor, threshold: float = 0.5) -> tuple[list[str], list[float]]:
+    def predict(self, spectrum: np.ndarray | torch.Tensor, threshold: float = 0.5, plot: bool = False) -> tuple[list[str], list[float]]:
         """
         Predict the functional groups for a given spectrum.
         :param spectrum: FTIR spectrum to predict. If a numpy array, given transform is applied first.
@@ -53,5 +54,21 @@ class Predictor:
             if prob >= threshold:
                 out_probs.append(prob)
                 out_labels.append(self.class_names[i])
+        
+        if plot:
+            fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+            ax[0].plot(spectrum.cpu().numpy().flatten(), label="Spectrum")
+            ax[0].set_title("FTIR Spectrum")
+            ax[0].set_xlabel("Wavenumber")
+            ax[0].set_ylabel("Absorbance")
+            ax[0].legend()
+            ax[1].bar(self.class_names, probs)
+
+            ax[1].set_title("Predicted Probabilities")
+            ax[1].set_xlabel("Functional Groups")
+            ax[1].set_ylabel("Probability")
+            ax[1].set_xticklabels(self.class_names, rotation=45, ha='right')
+            plt.tight_layout()
+            plt.show()
 
         return out_labels, out_probs

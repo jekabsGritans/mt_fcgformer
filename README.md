@@ -1,3 +1,8 @@
+## TODO
+- [ ] finish basic train/eval/predict with proper configs and scripts
+- [ ] integrate mlflow and more metrics / monitoring
+- [ ] dockerize
+- [ ] implement fcg transformer
 
 ## Datasets
 ### FTIR

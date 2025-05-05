@@ -1,1 +1,1 @@
-from predictor import Predictor
+from deploy.predictor import Predictor

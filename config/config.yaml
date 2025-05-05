@@ -1,6 +1,6 @@
 defaults:
   - device: cpu
-  - model: mlp
+  - model: ircnn
   - dataset: ftir
   - trainer: default
   - tester: default

@@ -1,7 +1,9 @@
 ## TODO
-- [ ] finish basic train/eval/predict with proper configs and scripts
-- [ ] clean up configs (e.g. share device as top level config, etc.)
-- [ ] integrate mlflow and more metrics / monitoring
+- [x] finish basic train/eval/predict with proper configs and scripts
+- [ ] test modes of running and debug
+- [ ] tidy up config and get proper rewrite ordering with \_self\_
+- [ ] integrate mlflow and more metrics / monitoring (use logger as well)
+- [ ] proper trainer (LR scheduling, etc.) and evaluation (per-class accuracies, etc.)
 - [ ] dockerize (first custom deployable, then myb dev container)
 - [ ] implement fcg transformer
 

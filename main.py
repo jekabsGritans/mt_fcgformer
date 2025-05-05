@@ -1,4 +1,3 @@
-
 import argparse
 import os
 
@@ -45,7 +44,7 @@ def run_training(cfg: DictConfig):
 def run_test(cfg: DictConfig):
     # hydra auto-instantiates the model and dataset
     model = instantiate(cfg.model)
-    eval_dataset = instantiate(cfg.test_dataset)
+    eval_dataset = instantiate(cfg.dataset.test)
 
     evaluator = Evaluator(model=model, eval_dataset=eval_dataset, **cfg.tester)
 

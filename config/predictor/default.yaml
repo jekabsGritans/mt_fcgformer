@@ -1,2 +1,3 @@
 threshold: 0.5
-sample: ./predictor/sample.npy
+sample: ./deploy/sample.npy
+plot: true

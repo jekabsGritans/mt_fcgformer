@@ -1,0 +1,16 @@
+train:
+  _target_: datasets.ftir_dataset.FTIRDataset
+  data_dir: ./data/ftir
+  split: train
+
+valid:
+  _target_: datasets.ftir_dataset.FTIRDataset
+  data_dir: ./data/ftir
+  split: valid
+
+test:
+  _target_: datasets.ftir_dataset.FTIRDataset
+  data_dir: ./data/ftir
+  split: test
+
+class_names: null # todo

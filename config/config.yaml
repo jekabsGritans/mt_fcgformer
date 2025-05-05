@@ -1,0 +1,8 @@
+defaults:
+  - device: cpu
+  - model: mlp
+  - dataset: ftir
+  - trainer: default
+  - tester: default
+  - predictor: default
+  - _self_

@@ -4,11 +4,10 @@ import torch
 
 from datasets.base_dataset import Transform
 from models.base_model import BaseModel
-from utils.transforms import np_to_torch
 
 
 class Predictor:
-    def __init__(self, model: BaseModel, device: str = "cpu", class_names: list[str] | None = None, transform: Transform = np_to_torch):
+    def __init__(self, model: BaseModel, device: str, class_names: list[str] | None, transform: Transform):
         """
         Initialize the predictor.
         :param model: Model to use for prediction

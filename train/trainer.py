@@ -9,7 +9,7 @@ from utils.misc import dict_to_device
 
 
 class Trainer:
-    def __init__(self, model: BaseModel, train_dataset: BaseDataset, val_dataset: BaseDataset, device: str = "cpu", lr: float = 1e-3, epochs: int = 10, batch_size: int = 32, num_workers: int = 4, shuffle: bool = True):
+    def __init__(self, model: BaseModel, train_dataset: BaseDataset, val_dataset: BaseDataset, device: str, lr: float, epochs: int, batch_size: int, num_workers: int, shuffle: bool):
         self.model = model
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset

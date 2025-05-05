@@ -5,6 +5,8 @@ Original Model (Keras Based): https://github.com/gj475/irchracterizationcnn
 Pytorch Reimplementation: https://github.com/lycaoduong/FcgFormer
 """
 
+from turtle import pos
+
 import torch
 import torch.nn as nn
 
@@ -12,7 +14,7 @@ from models.base_model import BaseModel
 
 
 class IrCNN(BaseModel):
-    def __init__(self, input_dim: int = 1024, output_dim: int = 17, kernel_size: int = 11, dropout_p: float = 0.48599073736368):
+    def __init__(self, input_dim: int, output_dim: int, pos_weights: torch.Tensor | None, kernel_size: int, dropout_p: float):
         """
         :param input_dim: Input dimension (number of features)
         :param output_dim: Output dimension (number of classes)
@@ -20,7 +22,7 @@ class IrCNN(BaseModel):
         :param kernel_size: Kernel size for the convolutional layers (hyperparameter)
         :param dropout_p: Dropout probability (hyperparameter)
         """
-        super().__init__(input_dim, output_dim)
+        super().__init__(input_dim, output_dim, pos_weights)
 
         in_ch = 1 # this is fixed for our repository
 

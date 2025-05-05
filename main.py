@@ -10,6 +10,7 @@ from omegaconf import DictConfig
 from deploy import Predictor
 from eval import Evaluator
 from train import Trainer
+from utils.transforms import np_to_torch
 
 
 def parse_args():
@@ -32,8 +33,8 @@ def main(cfg: DictConfig):
 def run_training(cfg: DictConfig):
     # hydra auto-instantiates the model and dataset
     model = instantiate(cfg.model)
-    train_dataset = instantiate(cfg.train_dataset)
-    val_dataset = instantiate(cfg.val_dataset)
+    train_dataset = instantiate(cfg.dataset.train)
+    val_dataset = instantiate(cfg.dataset.valid)
 
     trainer = Trainer(model=model, train_dataset=train_dataset, val_dataset=val_dataset, **cfg.trainer)
 
@@ -55,13 +56,13 @@ def run_prediction(cfg: DictConfig):
     # hydra auto-instantiates the model 
     model = instantiate(cfg.model)
 
-    predictor = Predictor(model=model, device=cfg.predictor.device, class_names=cfg.predictor.class_names)
+    predictor = Predictor(model=model, device=cfg.device, class_names=cfg.dataset.class_names, transform=np_to_torch)
 
-    if not os.path.exists(cfg.predictor.sample_path) or cfg.predictor.sample_path[-4:] != ".npy":
+    if not os.path.exists(cfg.predictor.sample) or cfg.predictor.sample[-4:] != ".npy":
         raise ValueError("Sample path must be an existing .npy file")
 
     # Load the sample spectrum
-    sample_spectrum = np.load(cfg.predictor.sample_path)
+    sample_spectrum = np.load(cfg.predictor.sample)
     if sample_spectrum.ndim != 1:
         raise ValueError(f"Sample spectrum must be 1d. Got {sample_spectrum.ndim}d.")
 

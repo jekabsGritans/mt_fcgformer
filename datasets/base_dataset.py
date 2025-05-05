@@ -1,4 +1,3 @@
-from abc import ABC
 from typing import Callable
 
 import numpy as np
@@ -20,13 +19,15 @@ class BaseDataset(Dataset):
     target: np.ndarray | None # (num_samples, num_classes). one-hot encoded
     transform: Transform
 
-    def __init__(self, transform: Transform = np_to_torch):
+    def __init__(self):
         """
         Initialize the dataset.
-        :param transform: Transform function to apply to the spectra
         """
         super().__init__()
-        self.transform = transform
+
+        # This is fixed per dataset. I.e. we won't want to change with params. 
+        # For training augmentations prolly fixed as well, but stochastic and myb dependant on state.
+        self.transform = np_to_torch 
 
         self.target = None
         self.load_data()

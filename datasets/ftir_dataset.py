@@ -20,16 +20,22 @@ class FTIRDataset(BaseDataset):
           8: "alkyl halides", 9: "esters", 10: "ketones", 11: "aldehydes", 12: "carboxylic acids",
           13: "ether", 14: "acyl halides", 15: "amides", 16: "nitro"}
 
-    def __init__(self, transform: Transform = np_to_torch, split: str = "train", data_dir: str = "./data/ftir"):
+    def __init__(self, split: str, data_dir: str):
             """
             Initialize the dataset.
             :param transform: Transform function to apply to the spectra
+            :param split: Split of the dataset to use. Can be "train", "valid", or "test".
+            :param data_dir: Directory containing the dataset
             """
             assert split in ["train", "valid", "test"], f"Unknown split: {split}"
             self.split = split
             self.data_dir = data_dir
 
-            super().__init__(transform=transform)
+            # This is fixed per dataset. I.e. we won't want to change with params. 
+            # For training augmentations prolly fixed as well, but stochastic and myb dependant on state.
+            self.transform = np_to_torch
+
+            super().__init__()
     
     def load_data(self):
         # Match all .npy files and extract the ID (without .npy)
@@ -77,8 +83,3 @@ class FTIRDataset(BaseDataset):
         with open(txt_path, "r") as f:
             y = np.array([int(tok) for tok in f.read().strip().split()], dtype=np.int64)
         return x, y
-    
-
-def main():
-    dataset = FTIRDataset()
-    print(dataset.inputs.shape)

@@ -11,7 +11,7 @@ class Evaluator:
     This evaluates the model on a dataset.
     Used for validation during training and for final evaluation during testing.
     """
-    def __init__(self, model: BaseModel, eval_dataset: BaseDataset, device: str = "cpu", batch_size: int = 32, num_workers: int = 4):
+    def __init__(self, model: BaseModel, eval_dataset: BaseDataset, device: str, batch_size: int, num_workers: int):
         self.model = model
         self.eval_dataset = eval_dataset
         self.device = device

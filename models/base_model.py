@@ -32,12 +32,17 @@ class BaseModel(nn.Module):
 
     def compute_loss(self, logits, targets):
         return self.loss_fn(logits, targets.float())
-
-    def step(self, batch) -> torch.Tensor:
+    
+    def step(self, batch: dict) -> dict:
         """
         Perform a single forward pass on a batch and return the loss.
         """
-        x, y = batch
+        x = batch["inputs"]
+        y = batch["target"]
         logits = self.forward(x)
         loss = self.compute_loss(logits, y)
-        return loss
+        
+        return {
+            "logits": logits,
+            "loss": loss,
+        }

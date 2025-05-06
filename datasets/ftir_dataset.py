@@ -26,13 +26,13 @@ class FTIRDataset(BaseDataset):
             assert split in ["train", "valid", "test"], f"Unknown split: {split}"
             self.data_dir = data_dir
             self.split = split
+            super().__init__() # after setting params needed for loading data, before setting anything else
+
             self.class_names = class_names
 
             # This is fixed per dataset. I.e. we won't want to change with params. 
             # For training augmentations prolly fixed as well, but stochastic and myb dependant on state.
-            self.transform = np_to_torch
-
-            super().__init__()
+            self.transform = lambda x: np_to_torch(x)[:1024] # TODO: ADD PROPER TRANSFORMS
     
     def load_data(self):
         # Match all .npy files and extract the ID (without .npy)

@@ -1,4 +1,3 @@
-import argparse
 import os
 
 import hydra
@@ -13,22 +12,16 @@ from train import Trainer
 from utils.transforms import np_to_torch
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["train", "test", "predict"], required=True)
-    return parser.parse_known_args()  # allow Hydra to parse the rest
-
-# Parse user-defined args *before* Hydra takes over
-args, _ = parse_args()
-
 @hydra.main(config_path="config", config_name="config", version_base="1.3")
 def main(cfg: DictConfig):
-    if args.mode == "train":
+    if cfg.mode == "train":
         run_training(cfg)
-    elif args.mode == "test":
+    elif cfg.mode == "test":
         run_test(cfg)
-    elif args.mode == "predict":
+    elif cfg.mode == "predict":
         run_prediction(cfg)
+    else:
+        raise ValueError(f"Unknown mode: {cfg.mode}. Must be one of ['train', 'test', 'predict']")
 
 def run_training(cfg: DictConfig):
     # hydra auto-instantiates the model and dataset
@@ -38,7 +31,7 @@ def run_training(cfg: DictConfig):
     pos_weights = torch.from_numpy(train_dataset.pos_weights)
     model = instantiate(cfg.model, pos_weights=pos_weights)
 
-    trainer = Trainer(model=model, train_dataset=train_dataset, val_dataset=val_dataset, **cfg.trainer)
+    trainer = Trainer(model=model, train_dataset=train_dataset, val_dataset=val_dataset, device=cfg.device, **cfg.trainer)
 
     # start training
     trainer.train()

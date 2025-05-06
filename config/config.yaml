@@ -1,7 +1,9 @@
 defaults:
-  - device: cpu
   - model: ircnn
   - dataset: ftir
   - trainer: default
   - tester: default
   - predictor: default
+
+mode: train
+device: cpu

@@ -57,7 +57,7 @@ class BaseDataset(Dataset):
 
         N = self.target.shape[0]
         samples_per_class = np.sum(self.target, axis=0)
-        self.pos_weghts = (N - self.target) / (samples_per_class + 1e-6)
+        self.pos_weights = (N - self.target) / (samples_per_class + 1e-6)
 
     def get_class_name(self, class_idx: int) -> str:
         """

@@ -42,12 +42,14 @@ class IrCNN(BaseModel):
             nn.MaxPool1d(kernel_size=2, stride=2)
         )
         self.cnn2_size = int(((self.cnn1_size - kernel_size + 1 - 2) / 2) + 1)
+
         # 1st dense layer.
         self.DENSE1 = nn.Sequential(
-            nn.Linear(in_features=self.cnn2_size*62, out_features=4927),
+            nn.Linear(in_features=self.cnn2_size * 62, out_features=4927),
             nn.ReLU(),
             nn.Dropout(p=dropout_p)
         )
+
         # 2st dense layer.
         self.DENSE2 = nn.Sequential(
             nn.Linear(in_features=4927, out_features=2785),
@@ -64,7 +66,8 @@ class IrCNN(BaseModel):
         self.FCN = nn.Linear(in_features=1574, out_features=output_dim)
 
     def forward(self, signal):
-        x = self.CNN1(signal)
+        x = signal.unsqueeze(dim=1)
+        x = self.CNN1(x)
         x = self.CNN2(x)
         x = torch.flatten(x, -2, -1)
         x = torch.unsqueeze(x, dim=1)

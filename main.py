@@ -6,6 +6,7 @@ import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 
+import utils.transforms as T
 from eval import Evaluator
 from train import Trainer
 
@@ -21,13 +22,19 @@ def main(cfg: DictConfig):
 
 def run_training(cfg: DictConfig):
     # hydra auto-instantiates the model and dataset
-    train_dataset = instantiate(cfg.dataset.train, transform=None)
-    val_dataset = instantiate(cfg.dataset.valid, transform=None)
+
+    train_transforms = T.Compose.from_hydra(cfg.dataset.train_transforms)
+    train_dataset = instantiate(cfg.dataset.train, transform=train_transforms)
+
+    val_transforms = T.Compose.from_hydra(cfg.dataset.eval_transforms)
+    val_dataset = instantiate(cfg.dataset.valid, transform=val_transforms)
 
     pos_weights = train_dataset.get_pos_weights()
     model = instantiate(cfg.model, pos_weights=pos_weights)
+    
+    validator = Evaluator(model=model, eval_dataset=val_dataset, device=cfg.device, **cfg.evaluator)
 
-    trainer = Trainer(model=model, train_dataset=train_dataset, val_dataset=val_dataset, device=cfg.device, **cfg.trainer)
+    trainer = Trainer(model=model, train_dataset=train_dataset, validator=validator, device=cfg.device, **cfg.trainer)
 
     # start training
     trainer.train()
@@ -35,9 +42,11 @@ def run_training(cfg: DictConfig):
 def run_test(cfg: DictConfig):
     # hydra auto-instantiates the model and dataset
     model = instantiate(cfg.model, pos_weights=None)
-    eval_dataset = instantiate(cfg.dataset.test, transform=None)
 
-    evaluator = Evaluator(model=model, eval_dataset=eval_dataset, **cfg.tester)
+    test_transforms = T.Compose.from_hydra(cfg.dataset.eval_transforms)
+    test_dataset = instantiate(cfg.dataset.test, transform=test_transforms)
+
+    evaluator = Evaluator(model=model, eval_dataset=test_dataset, device=cfg.device, **cfg.evaluator)
 
     # start evaluation
     evaluator.evaluate()

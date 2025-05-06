@@ -75,4 +75,5 @@ class IrCNN(BaseModel):
         x = self.DENSE2(x)
         x = self.DENSE3(x)
         x = self.FCN(x)
+        x = torch.squeeze(x, dim=1)
         return x

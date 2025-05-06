@@ -9,10 +9,9 @@ from utils.misc import dict_to_device
 
 
 class Trainer:
-    def __init__(self, model: BaseModel, train_dataset: BaseDataset, val_dataset: BaseDataset, device: str, lr: float, epochs: int, batch_size: int, num_workers: int, shuffle: bool):
+    def __init__(self, model: BaseModel, train_dataset: BaseDataset, validator: Evaluator, device: str, lr: float, epochs: int, batch_size: int, num_workers: int, shuffle: bool):
         self.model = model
         self.train_dataset = train_dataset
-        self.val_dataset = val_dataset
         self.device = device
         self.lr = lr
         self.epochs = epochs
@@ -29,13 +28,7 @@ class Trainer:
             self.model.parameters(), lr=lr
         )
 
-        self.validator = Evaluator(
-            model=self.model,
-            eval_dataset=self.val_dataset,
-            device=self.device,
-            batch_size=batch_size,
-            num_workers=num_workers
-        )
+        self.validator = validator
 
     def train(self):
         for epoch in range(self.epochs):
@@ -43,10 +36,14 @@ class Trainer:
             total_loss = 0
             for batch in tqdm(self.train_loader, desc=f"Epoch [{epoch+1}/{self.epochs}]"):
                 batch = dict_to_device(batch, self.device)
-                loss, _ = self.model.step(batch)
+
+                step_out = self.model.step(batch)
+                loss = step_out["loss"]
+
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
+
                 total_loss += loss.item()
 
             print(f"[Epoch {epoch+1}] Train Loss: {total_loss / len(self.train_loader):.4f}")

@@ -2,7 +2,7 @@ defaults:
   - model: ircnn
   - dataset: ftir
   - trainer: default
-  - tester: default
+  - evaluator: default
   - predictor: default
 
 mode: train

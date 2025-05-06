@@ -1,7 +1,6 @@
 from abc import ABC
 from typing import Callable
 
-import numpy as np
 import torch
 from torch.utils.data import Dataset
 
@@ -78,7 +77,6 @@ class BaseDataset(Dataset, ABC):
 
         if self.target is not None:
             target = self.target[index]
-            target = torch.from_numpy(target).to(torch.float32)
             out["target"] = target
 
         return out

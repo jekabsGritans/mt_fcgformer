@@ -57,6 +57,10 @@ class FTIRDataset(BaseDataset):
         x = np.load(npy_path)
         with open(txt_path, "r") as f:
             y = np.array([int(tok) for tok in f.read().strip().split()], dtype=np.int64)
+
+        x = torch.from_numpy(x).float()
+        y = torch.from_numpy(y).float()
+
         return x, y
     
     def __getitem__(self, index) -> dict:

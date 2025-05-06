@@ -9,6 +9,7 @@ services:
       - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}  
       - MLFLOW_TRACKING_USERNAME=${MLFLOW_TRACKING_USERNAME}
       - MLFLOW_TRACKING_PASSWORD=${MLFLOW_TRACKING_PASSWORD}
+      - HYDRA_FULL_ERROR=1 
     volumes:
       - .:/workspace           # optional: mount local code into container
       - ./outputs:/workspace/outputs  # save logs, checkpoints, etc.

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-import cv2
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, ListConfig
+import torch.nn.functional as F
 
 
 class Transform(ABC):
@@ -247,14 +247,12 @@ class Normalizer(Transform):
             norm = (norm - self.mean) / (self.std + 1e-12)
         return norm
 
-
-class Resizer(Transform):
+class Resizer:
     """
-    Resize a 1D signal to fixed length via cubic interpolation.
-
-    Args:
-        signal_size (int): target length L_out.
+    Resize a 1D signal to fixed length via bicubic interpolation,
+    using PyTorch’s F.interpolate under the hood.
     """
+
     def __init__(self, signal_size: int = 1024):
         self.signal_size = signal_size
 
@@ -264,13 +262,24 @@ class Resizer(Transform):
             x (Tensor): 1D signal of shape (L,).
 
         Returns:
-            Tensor: resized signal of shape (signal_size,), dtype=float32.
+            Tensor: resized signal of shape (signal_size,), dtype same as x.
         """
-        arr = x.detach().cpu().numpy().astype('float32')
-        # reshape to (1, L) so cv2 treats it as 1×L image
-        arr = arr.reshape(1, -1)
-        resized = cv2.resize(arr,
-                             (self.signal_size, 1),
-                             interpolation=cv2.INTER_CUBIC)  # returns shape (1, signal_size)
-        resized = resized.reshape(-1)  # back to (signal_size,)
-        return torch.from_numpy(resized).to(device=x.device)
+        if x.ndim != 1:
+            raise ValueError(f"Expected 1D tensor, got shape {x.shape}")
+
+        # [L] -> [1,1,L,1] so we can use bicubic (2D) interpolation on the length dim
+        x4d = x.unsqueeze(0).unsqueeze(0).unsqueeze(-1)  # shape (1,1,L,1)
+
+        # interpolate to (signal_size,1)
+        y4d = F.interpolate(
+            x4d,
+            size=(self.signal_size, 1),
+            mode="bicubic",
+            align_corners=True
+        )
+
+        # back to (signal_size,)
+        y = y4d.squeeze()  # removes dims 0,1 and the trailing 1
+
+        # make sure dtype and device match the input
+        return y.to(dtype=x.dtype, device=x.device)

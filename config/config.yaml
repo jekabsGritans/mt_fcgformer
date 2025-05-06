@@ -4,6 +4,7 @@ defaults:
   - trainer: default
   - evaluator: default
   - predictor: default
+  - _self_
 
 mode: train
 device: cpu

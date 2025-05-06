@@ -5,8 +5,6 @@ Original Model (Keras Based): https://github.com/gj475/irchracterizationcnn
 Pytorch Reimplementation: https://github.com/lycaoduong/FcgFormer
 """
 
-from turtle import pos
-
 import torch
 import torch.nn as nn
 

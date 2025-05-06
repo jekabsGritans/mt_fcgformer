@@ -5,4 +5,3 @@ defaults:
   - trainer: default
   - tester: default
   - predictor: default
-  - _self_

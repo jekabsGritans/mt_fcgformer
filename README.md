@@ -5,6 +5,7 @@
 - [ ] proper trainer (LR scheduling, etc.) and evaluation (per-class accuracies, etc.)
 - [ ] dockerize (first custom deployable, then myb dev container)
 - [ ] dataset registry in mlfow
+- [ ] make models deployable (package somewhere)
 - [ ] implement fcg transformer
 
 ## Datasets

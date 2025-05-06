@@ -1,15 +1,12 @@
 ## TODO
 - [x] finish basic train/eval/predict with proper configs and scripts
 - [x] test modes of running and debug
-- [ ] integrate mlflow and more metrics (from paper) / monitoring (use logger as well) / checkpointing
-    - [ ] basic latest + best checkpoints and loading from checkpoint
-    - [ ] mlflow and metric continuation
-- [ ] profile / optimize training. dataset cache, etc.
-- [ ] proper trainer (LR scheduling, etc.) and evaluation (per-class accuracies, etc.)
-- [ ] dockerize (first custom deployable, then myb dev container)
-- [ ] dataset registry in mlfow
-- [ ] make models deployable (package somewhere)
+- [ ] refactor / simplify (global config, singleton MLFlowManager)
+- [ ] better logging. and save log to mlflow
+- [ ] proper trainer (LR scheduling, etc.) and evaluation (per-class accuracies, visualizations, etc.)
 - [ ] implement fcg transformer
+- [ ] dataset registry in mlfow
+- [ ] deployable mlflow models
 
 ## Datasets
 ### FTIR

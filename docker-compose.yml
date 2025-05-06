@@ -12,7 +12,6 @@ services:
       - HYDRA_FULL_ERROR=1 
     volumes:
       - .:/workspace           # optional: mount local code into container
-      - ./outputs:/workspace/outputs  # save logs, checkpoints, etc.
     working_dir: /workspace
     command: >
       python main.py

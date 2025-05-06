@@ -1,2 +1,4 @@
 batch_size: 32
 num_workers: 4
+persistent_workers: True
+pin_memory: True

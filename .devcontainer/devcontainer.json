@@ -44,7 +44,10 @@
 				"ms-python.vscode-pylance",
 				"ms-python.debugpy",
 				"ms-azuretools.vscode-docker"
-			]
+			],
+			"settings": {
+				"python.defaultInterpreterPath": "/usr/bin/python"
+			  }
 		}
 	}
 

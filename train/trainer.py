@@ -9,17 +9,16 @@ from utils.misc import dict_to_device
 
 
 class Trainer:
-    def __init__(self, model: BaseModel, train_dataset: BaseDataset, validator: Evaluator, device: str, lr: float, epochs: int, batch_size: int, num_workers: int, shuffle: bool):
+    def __init__(self, model: BaseModel, train_dataset: BaseDataset, validator: Evaluator, device: str, lr: float, epochs: int, batch_size: int, num_workers: int, shuffle: bool, pin_memory: bool, persistent_workers: bool):
         self.model = model
         self.train_dataset = train_dataset
         self.device = device
         self.lr = lr
         self.epochs = epochs
         self.batch_size = batch_size
-        self.num_workers = num_workers
 
         self.train_loader = DataLoader(
-            self.train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers
+            self.train_dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=persistent_workers
             )
          
         self.model.to(self.device)

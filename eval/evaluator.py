@@ -4,6 +4,7 @@ from tqdm import tqdm
 
 from datasets import BaseDataset
 from models import BaseModel
+from utils.misc import dict_to_device
 
 
 class Evaluator:
@@ -11,15 +12,14 @@ class Evaluator:
     This evaluates the model on a dataset.
     Used for validation during training and for final evaluation during testing.
     """
-    def __init__(self, model: BaseModel, eval_dataset: BaseDataset, device: str, batch_size: int, num_workers: int):
+    def __init__(self, model: BaseModel, eval_dataset: BaseDataset, device: str, batch_size: int, num_workers: int, pin_memory: bool, persistent_workers: bool):
         self.model = model
         self.eval_dataset = eval_dataset
         self.device = device
         self.batch_size = batch_size
-        self.num_workers = num_workers
 
         self.eval_loader = DataLoader(
-            self.eval_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+            self.eval_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory, persistent_workers=persistent_workers
             )
         
         self.model.to(self.device)
@@ -35,6 +35,7 @@ class Evaluator:
         total_acc = 0
         with torch.no_grad():
             for batch in tqdm(self.eval_loader, desc="Evaluating", unit="batch"):
+                batch = dict_to_device(batch, self.device)
                 step_out = self.model.step(batch)
                 logits = step_out["logits"] 
                 loss = step_out["loss"]

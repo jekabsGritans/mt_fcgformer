@@ -19,3 +19,10 @@ services:
       trainer.epochs=5
       model=ircnn
       dataset=ftir
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

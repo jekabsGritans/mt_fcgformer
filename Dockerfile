@@ -1,4 +1,5 @@
-FROM pytorch/pytorch:latest
+FROM nvcr.io/nvidia/pytorch:25.03-py3
+# FROM pytorch/pytorch:latest 
 
 WORKDIR /workspace
 

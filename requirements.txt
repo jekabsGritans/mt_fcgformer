@@ -5,3 +5,4 @@ hydra-core
 omegaconf
 tqdm
 opencv-python
+mlflow

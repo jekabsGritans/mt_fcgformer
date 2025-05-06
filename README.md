@@ -1,7 +1,10 @@
 ## TODO
 - [x] finish basic train/eval/predict with proper configs and scripts
-- [ ] test modes of running and debug
+- [x] test modes of running and debug
 - [ ] integrate mlflow and more metrics (from paper) / monitoring (use logger as well) / checkpointing
+    - [ ] basic latest + best checkpoints and loading from checkpoint
+    - [ ] mlflow and metric continuation
+- [ ] profile / optimize training. dataset cache, etc.
 - [ ] proper trainer (LR scheduling, etc.) and evaluation (per-class accuracies, etc.)
 - [ ] dockerize (first custom deployable, then myb dev container)
 - [ ] dataset registry in mlfow

@@ -7,3 +7,4 @@ defaults:
 
 mode: train
 device: cpu
+checkpoint: null

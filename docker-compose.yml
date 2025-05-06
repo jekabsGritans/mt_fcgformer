@@ -1,0 +1,21 @@
+services:
+  experiment:
+    build:
+      context: .               # build from the current directory
+      dockerfile: Dockerfile   # your custom Dockerfile
+    image: ml-experiment       # name of the resulting image
+    environment:
+      # defined in .env
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI}  
+      - MLFLOW_TRACKING_USERNAME=${MLFLOW_TRACKING_USERNAME}
+      - MLFLOW_TRACKING_PASSWORD=${MLFLOW_TRACKING_PASSWORD}
+    volumes:
+      - .:/workspace           # optional: mount local code into container
+      - ./outputs:/workspace/outputs  # save logs, checkpoints, etc.
+    working_dir: /workspace
+    command: >
+      python main.py
+      mode=train
+      trainer.epochs=5
+      model=ircnn
+      dataset=ftir

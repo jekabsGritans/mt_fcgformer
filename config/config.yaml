@@ -8,4 +8,6 @@ defaults:
 
 mode: train
 device: cpu
-checkpoint: null
+run_path: ./runs
+experiment_name: functional-group-detection
+model_name: ${model}_${dataset} # we version models per dataset

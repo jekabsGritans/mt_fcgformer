@@ -31,6 +31,15 @@ class BaseDataset(Dataset, ABC):
         self.target = None
         self.class_names = None
         self.pos_weights = None
+    
+    def to(self, device: torch.device):
+        """
+        Move the dataset to the specified device.
+        :param device: Device to move the dataset to
+        """
+        self.inputs = self.inputs.to(device)
+        if self.target is not None:
+            self.target = self.target.to(device)
 
     def get_pos_weights(self) -> torch.Tensor:
         """

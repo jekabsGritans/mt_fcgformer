@@ -25,9 +25,11 @@ def run_training(cfg: DictConfig):
 
     train_transforms = T.Compose.from_hydra(cfg.dataset.train_transforms)
     train_dataset = instantiate(cfg.dataset.train, transform=train_transforms)
+    train_dataset.to(cfg.device)
 
     val_transforms = T.Compose.from_hydra(cfg.dataset.eval_transforms)
     val_dataset = instantiate(cfg.dataset.valid, transform=val_transforms)
+    val_dataset.to(cfg.device)
 
     pos_weights = train_dataset.get_pos_weights()
     model = instantiate(cfg.model, pos_weights=pos_weights)
@@ -45,6 +47,7 @@ def run_test(cfg: DictConfig):
 
     test_transforms = T.Compose.from_hydra(cfg.dataset.eval_transforms)
     test_dataset = instantiate(cfg.dataset.test, transform=test_transforms)
+    test_dataset.to(cfg.device)
 
     evaluator = Evaluator(model=model, eval_dataset=test_dataset, device=cfg.device, **cfg.evaluator)
 

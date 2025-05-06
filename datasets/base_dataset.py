@@ -18,6 +18,8 @@ class BaseDataset(Dataset):
     inputs: np.ndarray # (num_samples, num_features). out input is 1d
     target: np.ndarray | None # (num_samples, num_classes). one-hot encoded
     transform: Transform
+    class_names: list[str] | None
+    pos_weights: np.ndarray | None # (num_classes,)
 
     def __init__(self):
         """
@@ -30,7 +32,13 @@ class BaseDataset(Dataset):
         self.transform = np_to_torch 
 
         self.target = None
+        self.class_names = None
+        self.pos_weights = None
+
         self.load_data()
+
+        if self.target is not None:
+            self.compute_pos_weights()
     
     def load_data(self):
         """
@@ -40,6 +48,25 @@ class BaseDataset(Dataset):
         """
         self.inputs = np.random.rand(100, 10)
         self.target = np.random.randint(0, 2, (100, 5))
+    
+    def compute_pos_weights(self):
+        """
+        Compute the positive weights for each class for weighted loss.
+        """
+        assert self.target is not None, "Target is None. Cannot compute positive weights."
+
+        N = self.target.shape[0]
+        samples_per_class = np.sum(self.target, axis=0)
+        self.pos_weghts = (N - self.target) / (samples_per_class + 1e-6)
+
+    def get_class_name(self, class_idx: int) -> str:
+        """
+        Get the name of a predicted class by index.
+        """
+        if self.class_names is None:
+            return f"Class {class_idx}"
+        else:
+            return self.class_names[class_idx]
        
     def __len__(self):
         """

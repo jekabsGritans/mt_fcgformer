@@ -41,7 +41,7 @@ class Trainer:
         for epoch in range(self.epochs):
             self.model.train()
             total_loss = 0
-            for batch in self.train_loader:
+            for batch in tqdm(self.train_loader, desc=f"Epoch [{epoch+1}/{self.epochs}]"):
                 batch = dict_to_device(batch, self.device)
                 loss, _ = self.model.step(batch)
                 self.optimizer.zero_grad()

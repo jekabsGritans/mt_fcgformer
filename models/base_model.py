@@ -19,6 +19,7 @@ class BaseModel(nn.Module):
         self.output_dim = output_dim
 
         if pos_weights is not None:
+            self.register_buffer("pos_weight", pos_weights)
             self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weights)
         else:
             self.loss_fn = nn.BCEWithLogitsLoss()

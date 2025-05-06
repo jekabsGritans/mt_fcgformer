@@ -3,6 +3,7 @@ import os
 
 import hydra
 import numpy as np
+import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 
@@ -31,9 +32,11 @@ def main(cfg: DictConfig):
 
 def run_training(cfg: DictConfig):
     # hydra auto-instantiates the model and dataset
-    model = instantiate(cfg.model)
     train_dataset = instantiate(cfg.dataset.train)
     val_dataset = instantiate(cfg.dataset.valid)
+
+    pos_weights = torch.from_numpy(train_dataset.pos_weights)
+    model = instantiate(cfg.model, pos_weights=pos_weights)
 
     trainer = Trainer(model=model, train_dataset=train_dataset, val_dataset=val_dataset, **cfg.trainer)
 
@@ -43,7 +46,7 @@ def run_training(cfg: DictConfig):
 
 def run_test(cfg: DictConfig):
     # hydra auto-instantiates the model and dataset
-    model = instantiate(cfg.model)
+    model = instantiate(cfg.model, pos_weights=None)
     eval_dataset = instantiate(cfg.dataset.test)
 
     evaluator = Evaluator(model=model, eval_dataset=eval_dataset, **cfg.tester)
@@ -53,7 +56,7 @@ def run_test(cfg: DictConfig):
 
 def run_prediction(cfg: DictConfig):
     # hydra auto-instantiates the model 
-    model = instantiate(cfg.model)
+    model = instantiate(cfg.model, pos_weights=None)
 
     predictor = Predictor(model=model, device=cfg.device, class_names=cfg.dataset.class_names, transform=np_to_torch)
 

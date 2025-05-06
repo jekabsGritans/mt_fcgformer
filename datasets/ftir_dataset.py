@@ -16,20 +16,17 @@ class FTIRDataset(BaseDataset):
 
     nist_ids: np.ndarray # (num_samples,) contains the NIST IDs of the samples
 
-    str_labels = {0: "alkane", 1: "methyl", 2: "alkene", 3: "alkyne", 4: "alcohols", 5: "amines", 6: "nitriles", 7: "aromatics",
-          8: "alkyl halides", 9: "esters", 10: "ketones", 11: "aldehydes", 12: "carboxylic acids",
-          13: "ether", 14: "acyl halides", 15: "amides", 16: "nitro"}
-
-    def __init__(self, split: str, data_dir: str):
+    def __init__(self, data_dir: str, split: str, class_names: list[str]):
             """
             Initialize the dataset.
-            :param transform: Transform function to apply to the spectra
-            :param split: Split of the dataset to use. Can be "train", "valid", or "test".
             :param data_dir: Directory containing the dataset
+            :param split: Split of the dataset to use. Can be "train", "valid", or "test".
+            :param class_names: Names of boolean features that are predicted
             """
             assert split in ["train", "valid", "test"], f"Unknown split: {split}"
-            self.split = split
             self.data_dir = data_dir
+            self.split = split
+            self.class_names = class_names
 
             # This is fixed per dataset. I.e. we won't want to change with params. 
             # For training augmentations prolly fixed as well, but stochastic and myb dependant on state.
@@ -54,14 +51,6 @@ class FTIRDataset(BaseDataset):
         self.inputs = np.stack(inputs, axis=0)
         self.target = np.stack(targets, axis=0)
     
-    def str_label(self, label: int) -> str:
-        """
-        Convert a label to its string representation.
-        :param label: Label to convert
-        :return: String representation of the label
-        """
-        return self.str_labels[label]
-
     def __getitem__(self, index) -> dict:
         """
         Get a sample from the dataset.

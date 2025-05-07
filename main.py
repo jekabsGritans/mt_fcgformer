@@ -7,7 +7,7 @@ from omegaconf import DictConfig
 import utils.transforms as T
 from eval import Tester
 from train import Trainer
-from utils.mlflow_utils import log_config, setup_mlflow
+from utils.mlflow_utils import setup_mlflow
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.3")

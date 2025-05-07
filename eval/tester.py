@@ -1,3 +1,4 @@
+import mlflow
 import torch
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
@@ -8,7 +9,7 @@ from eval.metrics import (compute_exact_match_ratio, compute_overall_accuracy,
                           compute_per_class_accuracy)
 from models import BaseModel
 from utils.misc import dict_to_device
-from utils.mlflow_utils import download_artifact
+from utils.mlflow_utils import download_artifact, log_config
 
 
 class Tester:
@@ -54,37 +55,42 @@ class Tester:
         """
 
         assert self.dataset.target is not None, "Test dataset must have targets for evaluation."
-        predictions = torch.zeros_like(self.dataset.target, device=self.cfg.device) # (num_samples, num_classes) 0/1 for each class
 
-        self.model.eval()
+        with mlflow.start_run(run_name=f"test_{self.cfg.run_name}"):
 
-        with torch.no_grad():
-            start_idx = 0
-            for batch in tqdm(self.data_loader, desc="Testing", unit="batch"):
-                batch = dict_to_device(batch, self.cfg.device)
-                step_out = self.model.step(batch)
-                logits = step_out["logits"] 
+            log_config(self.cfg)
 
-                preds = torch.sigmoid(logits)
-                preds = (preds > 0.5).float()
+            predictions = torch.zeros_like(self.dataset.target, device=self.cfg.device) # (num_samples, num_classes) 0/1 for each class
 
-                batch_size = preds.shape[0]
-                end_idx = start_idx + batch_size
-                predictions[start_idx:end_idx] = preds
+            self.model.eval()
 
-                start_idx = end_idx
+            with torch.no_grad():
+                start_idx = 0
+                for batch in tqdm(self.data_loader, desc="Testing", unit="batch"):
+                    batch = dict_to_device(batch, self.cfg.device)
+                    step_out = self.model.step(batch)
+                    logits = step_out["logits"] 
 
-        per_class_acc = compute_per_class_accuracy(predictions, self.dataset.target)
-        overall_acc = compute_overall_accuracy(predictions, self.dataset.target)
-        exact_match_ratio = compute_exact_match_ratio(predictions, self.dataset.target)
+                    preds = torch.sigmoid(logits)
+                    preds = (preds > 0.5).float()
 
-        test_metrics = {
-            "overall_accuracy": overall_acc,
-            "per_class_accuracy": per_class_acc,
-            "exact_match_ratio": exact_match_ratio,
-        }
+                    batch_size = preds.shape[0]
+                    end_idx = start_idx + batch_size
+                    predictions[start_idx:end_idx] = preds
 
-        print("Test metrics:", test_metrics)
+                    start_idx = end_idx
 
-        # TODO: other metrics and visualizations
-        # TODO: logg to mlflow. bit different than for training since no epoch
+            per_class_acc = compute_per_class_accuracy(predictions, self.dataset.target)
+            overall_acc = compute_overall_accuracy(predictions, self.dataset.target)
+            exact_match_ratio = compute_exact_match_ratio(predictions, self.dataset.target)
+
+            test_metrics = {
+                "overall_accuracy": overall_acc,
+                "per_class_accuracy": per_class_acc,
+                "exact_match_ratio": exact_match_ratio,
+            }
+
+            print("Test metrics:", test_metrics)
+
+            # TODO: other metrics and visualizations
+            # TODO: logg to mlflow. bit different than for training since no epoch

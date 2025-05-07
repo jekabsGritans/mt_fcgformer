@@ -1,20 +1,20 @@
 ## TODO
-- [x] finish basic train/eval/predict with proper configs and scripts
-- [x] test modes of running and debug
-- [x] refactor / simplify (global config, singleton MLFlowManager)
-- [x] better logging. and save log to mlflow
-- [ ] proper trainer (LR scheduling, etc.) and evaluation (per-class accuracies, visualizations, etc.)
-    - rethin pos_weights given multilabel
-- [ ] implement fcg transformer
-- [ ] dataset registry in mlfow
-
-- [ ] deploy model by 1.) logging it 2.) loading it in a different python script
-
-## For model improvements 
+- [ ] figure out model deployment via standalone code. 
+    - [ ] resolve warnings
+    - [ ] add input/output schemas and descriptions
+- [ ] improve evaluation, incl neater (in terms of mlflowui) per-class organisation, recall, precission, etc.
+- [ ] improve training (LR scheduling and good optimizer)
+    - [ ] pos weights implemented correctly?
+- [ ] dataset registry and versioning
+- [ ] implement and train fcg transformer
+- [ ] visualize attention
 - [ ] templates for reproducible dataset generation through augmentation of existing datasets in notebooks 
     - 2 kinds of transforms:
         - simple augmentations like adding noise, done at training time
         - theory-based augmentations to expand dataset at time of versioned dataset generation
+- [ ] implement and train mt_fcg transformer
+- [ ] clean up repo and improve docs
+
 
 ## Datasets
 ### FTIR

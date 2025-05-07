@@ -63,8 +63,8 @@ class Trainer:
             run_id (str): MLFlow run ID.
             filename (str): Name of the checkpoint file (e.g. "latest_model.pt")
         """
-        download_artifact(run_id, filename)
-        self.load_checkpoint(filename)
+        local_path = download_artifact(run_id, filename)
+        self.load_checkpoint(local_path)
 
     def save_checkpoint(self, filename: str):
         """

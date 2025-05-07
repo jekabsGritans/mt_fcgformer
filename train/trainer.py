@@ -93,7 +93,6 @@ class Trainer:
         Validate the model on the validation dataset.
         :return: Tuple of (average loss, average accuracy)
         """
-        self.model.eval()
 
         assert self.val_dataset.target is not None, "Validation dataset must have targets for evaluation."
         predictions = torch.zeros_like(self.val_dataset.target, device=self.cfg.device) # (num_samples, num_classes) 0/1 for each class
@@ -163,7 +162,7 @@ class Trainer:
             for epoch in range(self.cfg.trainer.epochs):
                 self.model.train()
 
-                for batch_idx, batch in enumerate(tqdm(self.train_loader, desc=f"Epoch [{epoch+1}/{self.cfg.epochs}]")):
+                for batch_idx, batch in enumerate(tqdm(self.train_loader, desc=f"Epoch [{epoch+1}/{self.cfg.trainer.epochs}]")):
                     batch = dict_to_device(batch, self.cfg.device)
 
                     step_out = self.model.step(batch)
@@ -178,9 +177,12 @@ class Trainer:
                         mlflow.log_metrics({
                             "train/batch_loss": loss.item(),
                             "train/epoch": epoch + 1,
+                            "train/lr": self.optimizer.param_groups[0]["lr"],
                         }, step=total_steps)
 
                     total_steps += 1
+
+                mlflow.log_metrics({"epoch_completed": epoch + 1}, step=total_steps)
 
                 # Validation
 

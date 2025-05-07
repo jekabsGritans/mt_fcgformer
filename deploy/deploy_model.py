@@ -41,9 +41,6 @@ def deploy_model_from_config(cfg: DictConfig):
     config_path = download_artifact(run_id, "config.yaml")
     train_cfg = OmegaConf.load(config_path)
 
-    # Log the checkpoint id
-    mlflow.set_tag("from_checkpoint", cfg.checkpoint)
-
     # Determine model name
     model_name = f"{train_cfg.model.name}_{train_cfg.dataset.name}"
 
@@ -74,16 +71,17 @@ def deploy_model_from_config(cfg: DictConfig):
         registered_model_name=model_name
     )
     
-    # Optional: Add description and metadata using the MLflow client
+    # Get latest version without using stages
     client = mlflow.tracking.MlflowClient()
-    versions = client.get_latest_versions(model_name, stages=["None"])
-    if versions:
-        latest_version = versions[0].version
+    model_versions = client.search_model_versions(f"name='{model_name}'")
+    if model_versions:
+        # Get the highest version number
+        latest_version = max([int(mv.version) for mv in model_versions])
         
         # Update description
         client.update_model_version(
             name=model_name,
-            version=latest_version,
+            version=str(latest_version),
             description=f"Deployed from checkpoint {cfg.checkpoint}"
         )
         

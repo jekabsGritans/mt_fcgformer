@@ -11,6 +11,7 @@ trainer:
   shuffle: True
 
   checkpoint_every: 5 # every 5 epochs
+  log_every: 10 # every 10 batches
 
   # needs to be single-threaded if we store dataset in gpu memory
   # for cpu, can speed up by making multithreaded and settings persistent_workers, pin_memory to true

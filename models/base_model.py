@@ -1,5 +1,3 @@
-from abc import ABC, abstractmethod
-from typing import Any
 
 import torch
 import torch.nn as nn
@@ -16,14 +14,14 @@ class BaseModel(nn.Module):
     input_dim: int
     output_dim: int
 
-    def __init__(self, input_dim: int, output_dim: int, pos_weights: torch.Tensor | None):
+    def __init__(self, input_dim: int, output_dim: int, pos_weights: list[float] | None):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
 
         if pos_weights is not None:
-            self.register_buffer("pos_weight", pos_weights)
-            self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weights)
+            torch_pos_weights = torch.tensor(pos_weights, dtype=torch.float32)
+            self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch_pos_weights)
         else:
             self.loss_fn = nn.BCEWithLogitsLoss()
 

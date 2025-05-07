@@ -1,17 +1,19 @@
+# Models / datasets use configs for auto-instantiation of objects, so those have strict structure
 defaults:
   - model: ircnn
   - dataset: ftir
   - _self_
 
 
+# The below settings are used by modules as they wish (i.e. no auto-instantiation)
 trainer:
   lr: 1e-3
   epochs: 10
   batch_size: 32
   shuffle: True
 
-  checkpoint_every: 5 # every 5 epochs
-  log_every: 10 # every 10 batches
+  checkpoint_interval_epochs: 5 # checkpoint every 5 epochs
+  log_interval_steps: 10 # log metrics every 10 training steps
 
   # needs to be single-threaded if we store dataset in gpu memory
   # for cpu, can speed up by making multithreaded and settings persistent_workers, pin_memory to true
@@ -25,7 +27,6 @@ trainer:
     persistent_workers: False
     pin_memory: False
 
-
 tester:
   batch_size: 32
   num_workers: 0
@@ -38,5 +39,5 @@ checkpoint: # {run_id}/{checkpoint_filename}
 device: cuda:0
 runs_path: ./runs
 experiment_name: functional-group-detection
-model_name: ${model}_${dataset} # we version models per dataset
-run_name: ${model_name}_${now:%Y-%m-%d_%H-%M-%S}
+model_name: ${model.name}_${dataset.name} # we version models per dataset
+run_name: ${mode}_${model_name}_${now:%Y-%m-%d_%H-%M-%S} # a run is  "mode-model-dataset-time"

@@ -12,7 +12,7 @@ from models.base_model import BaseModel
 
 
 class IrCNN(BaseModel):
-    def __init__(self, input_dim: int, output_dim: int, pos_weights: torch.Tensor | None, kernel_size: int, dropout_p: float):
+    def __init__(self, input_dim: int, output_dim: int, pos_weights: list[float] | None, kernel_size: int, dropout_p: float):
         """
         :param input_dim: Input dimension (number of features)
         :param output_dim: Output dimension (number of classes)

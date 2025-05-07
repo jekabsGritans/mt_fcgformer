@@ -5,22 +5,26 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Default",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/main.py",
-            "console": "integratedTerminal"
-        },
-        {
-            "name": "Default (cuda)",
+            "name": "train (cuda)",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
             "args": [
+                "mode=train",
                 "device=cuda:0"
             ]
-            
+        },
+        {
+            "name": "test (cuda)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "mode=test",
+                "device=cuda:0"
+            ]
         }
     ]
 }

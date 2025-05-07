@@ -10,14 +10,14 @@ from datasets import BaseDataset
 from eval.metrics import (compute_exact_match_ratio, compute_overall_accuracy,
                           compute_per_class_accuracy)
 from models import BaseModel
+from utils.config import cfg
 from utils.misc import dict_to_device, is_folder_filename_path
-from utils.mlflow_utils import (download_artifact, log_config, upload_artifact,
-                                upload_model)
+from utils.mlflow_utils import download_artifact, upload_artifact, upload_model
 
 
 class Trainer:
 
-    def __init__(self, model: BaseModel, train_dataset: BaseDataset, val_dataset: BaseDataset, cfg: DictConfig):
+    def __init__(self, model: BaseModel, train_dataset: BaseDataset, val_dataset: BaseDataset):
 
         self.model = model.to(cfg.device)
         self.train_dataset = train_dataset.to(cfg.device)
@@ -43,8 +43,6 @@ class Trainer:
 
         self.best_val_loss = float('inf')
 
-        self.cfg = cfg
-
     def load_checkpoint(self, checkpoint_path: str):
         """
         Load model and optimizer states from checkpoint.
@@ -63,7 +61,7 @@ class Trainer:
             run_id (str): MLFlow run ID.
             filename (str): Name of the checkpoint file (e.g. "latest_model.pt")
         """
-        download_artifact(self.cfg, run_id, filename)
+        download_artifact(run_id, filename)
         self.load_checkpoint(filename)
 
     def upload_checkpoint(self, filename: str):
@@ -73,7 +71,7 @@ class Trainer:
             filename (str): Name of the checkpoint file (e.g. "latest_model.pt")
         """
 
-        local_path = os.path.join(self.cfg.run_path, filename)
+        local_path = os.path.join(cfg.run_path, filename)
 
         checkpoint = {
             "model_state_dict": self.model.state_dict(),
@@ -95,7 +93,7 @@ class Trainer:
         """
 
         assert self.val_dataset.target is not None, "Validation dataset must have targets for evaluation."
-        predictions = torch.zeros_like(self.val_dataset.target, device=self.cfg.device) # (num_samples, num_classes) 0/1 for each class
+        predictions = torch.zeros_like(self.val_dataset.target, device=cfg.device) # (num_samples, num_classes) 0/1 for each class
 
         self.model.eval()
 
@@ -105,7 +103,7 @@ class Trainer:
         with torch.no_grad():
             start_idx = 0
             for batch in tqdm(self.val_loader, desc="Testing", unit="batch"):
-                batch = dict_to_device(batch, self.cfg.device)
+                batch = dict_to_device(batch, cfg.device)
                 step_out = self.model.step(batch)
                 logits = step_out["logits"] 
                 loss = step_out["loss"]
@@ -147,53 +145,49 @@ class Trainer:
 
     def train(self):
 
-        with mlflow.start_run(run_name=self.cfg.run_name):
+        if cfg.checkpoint is not None:
+            assert is_folder_filename_path(cfg.checkpoint), "Checkpoint path should be of form {run_id}/{filename}"
+            run_id, filename = cfg.checkpoint.split("/")
+            self.download_checkpoint(run_id, filename)
 
-            log_config(self.cfg)
+        self.best_val_loss = float("inf")
+        total_steps = 0 # global step counter
 
-            if self.cfg.checkpoint is not None:
-                assert is_folder_filename_path(self.cfg.checkpoint), "Checkpoint path should be of form {run_id}/{filename}"
-                run_id, filename = self.cfg.checkpoint.split("/")
-                self.download_checkpoint(run_id, filename)
+        for epoch in range(cfg.trainer.epochs):
+            self.model.train()
 
-            self.best_val_loss = float("inf")
-            total_steps = 0 # global step counter
+            for batch_idx, batch in enumerate(tqdm(self.train_loader, desc=f"Epoch [{epoch+1}/{cfg.trainer.epochs}]")):
+                batch = dict_to_device(batch, cfg.device)
 
-            for epoch in range(self.cfg.trainer.epochs):
-                self.model.train()
+                step_out = self.model.step(batch)
+                loss = step_out["loss"]
 
-                for batch_idx, batch in enumerate(tqdm(self.train_loader, desc=f"Epoch [{epoch+1}/{self.cfg.trainer.epochs}]")):
-                    batch = dict_to_device(batch, self.cfg.device)
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
 
-                    step_out = self.model.step(batch)
-                    loss = step_out["loss"]
+                # log batch metrics
+                if (batch_idx + 1) % cfg.trainer.log_interval_steps == 0:
+                    mlflow.log_metrics({
+                        "train/batch_loss": loss.item(),
+                        "train/epoch": epoch + 1,
+                        "train/lr": self.optimizer.param_groups[0]["lr"],
+                    }, step=total_steps)
 
-                    self.optimizer.zero_grad()
-                    loss.backward()
-                    self.optimizer.step()
+                total_steps += 1
 
-                    # log batch metrics
-                    if (batch_idx + 1) % self.cfg.trainer.log_every == 0:
-                        mlflow.log_metrics({
-                            "train/batch_loss": loss.item(),
-                            "train/epoch": epoch + 1,
-                            "train/lr": self.optimizer.param_groups[0]["lr"],
-                        }, step=total_steps)
+            mlflow.log_metrics({"epoch_completed": epoch + 1}, step=total_steps)
 
-                    total_steps += 1
+            # Validation
 
-                mlflow.log_metrics({"epoch_completed": epoch + 1}, step=total_steps)
+            val_loss, val_acc = self.validate(total_steps=total_steps) 
 
-                # Validation
+            if val_loss < self.best_val_loss:
+                self.best_val_loss = val_loss
+                self.upload_checkpoint("best_checkpoint.pt")
+                self.upload_checkpoint("latest_checkpoint.pt")
 
-                val_loss, val_acc = self.validate(total_steps=total_steps) 
+            elif (epoch + 1) % cfg.trainer.checkpoint_interval_epochs == 0:
+                    self.upload_checkpoint(f"latest_checkpoint.pt")
 
-                if val_loss < self.best_val_loss:
-                    self.best_val_loss = val_loss
-                    self.upload_checkpoint("best_checkpoint.pt")
-                    self.upload_checkpoint("latest_checkpoint.pt")
-
-                elif (epoch + 1) % self.cfg.trainer.checkpoint_every == 0:
-                        self.upload_checkpoint(f"latest_checkpoint.pt")
-
-            self.upload_best_model()
+        self.upload_best_model()

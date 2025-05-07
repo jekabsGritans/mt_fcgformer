@@ -23,8 +23,20 @@
             "console": "integratedTerminal",
             "args": [
                 "mode=test",
-                "device=cuda:0"
+                "device=cuda:0",
+                "checkpoint=55616055fd524588aa20b7b967969037/best_checkpoint.pt"
             ]
-        }
+        },
+         {
+            "name": "deploy",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "mode=deploy",
+                "checkpoint=55616055fd524588aa20b7b967969037/best_checkpoint.pt"
+            ]
+        },       
     ]
 }

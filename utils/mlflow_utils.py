@@ -84,7 +84,7 @@ def configure_mlflow_auth():
     mlflow.set_tracking_uri(tracking_uri)
     
 
-def setup_mlflow() -> None:
+def start_run(log_config: bool = True) -> None:
     """
     Setup MLflow tracking for experiment.
     1. Connect to MLflow server
@@ -95,8 +95,6 @@ def setup_mlflow() -> None:
 
     cfg = get_config()
 
-    configure_mlflow_auth()
-    
     # Create experiment (or get existing one) 
     mlflow.set_experiment(cfg.experiment_name)
 
@@ -104,22 +102,23 @@ def setup_mlflow() -> None:
     mlflow.start_run(run_name=cfg.run_name)
 
     # Log config
+    if log_config:
 
-    ## as parameters
-    flat_config = OmegaConf.to_container(cfg, resolve=True)
-    mlflow.log_params(_flatten_dict(flat_config))
+        ## as parameters
+        flat_config = OmegaConf.to_container(cfg, resolve=True)
+        mlflow.log_params(_flatten_dict(flat_config))
 
-    ## as YAML artifact for reproducibility
-    run_id = get_run_id()
-    run_path = os.path.join(cfg.runs_path, run_id)
-    os.makedirs(run_path, exist_ok=True)
+        ## as YAML artifact for reproducibility
+        run_id = get_run_id()
+        run_path = os.path.join(cfg.runs_path, run_id)
+        os.makedirs(run_path, exist_ok=True)
 
-    config_path = os.path.join(run_path, "config.yaml")
+        config_path = os.path.join(run_path, "config.yaml")
 
-    with open(config_path, "w") as f:
-        OmegaConf.save(config=cfg, f=f)
+        with open(config_path, "w") as f:
+            OmegaConf.save(config=cfg, f=f)
 
-    upload_artifact(config_path) # saves to runs:/{current_run_id}/config.yaml
+        upload_artifact(config_path) # saves to runs:/{current_run_id}/config.yaml
 
 def download_artifact(run_id: str, filename: str) -> str:
     """

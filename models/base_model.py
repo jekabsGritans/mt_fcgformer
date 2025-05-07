@@ -19,11 +19,11 @@ class BaseModel(nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
 
-        if pos_weights is not None:
-            torch_pos_weights = torch.tensor(pos_weights, dtype=torch.float32)
-            self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch_pos_weights)
-        else:
-            self.loss_fn = nn.BCEWithLogitsLoss()
+        if pos_weights is None:
+            pos_weights = [1.0] * output_dim
+
+        torch_pos_weights = torch.tensor(pos_weights, dtype=torch.float32)
+        self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch_pos_weights)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """

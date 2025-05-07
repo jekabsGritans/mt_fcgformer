@@ -7,7 +7,8 @@ from deploy import deploy_model_from_config
 from eval import Tester
 from train import Trainer
 from utils.config import set_config
-from utils.mlflow_utils import setup_mlflow
+from utils.mlflow_utils import (configure_mlflow_auth, download_artifact,
+                                start_run)
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.3")
@@ -15,8 +16,13 @@ def main(cfg: DictConfig):
     # make config available globally
     set_config(cfg)
 
-    # set up experiment tracking and document config
-    setup_mlflow()
+    # auth to mlflow
+    configure_mlflow_auth()
+
+    # set up experiment tracking 
+    # log config only if train/test, since for deployment the checkpoint run's config is relevant not this one.
+    do_log_config = cfg.mode in ["train", "test"]
+    start_run(log_config=do_log_config)
 
     # dataset-specific transforms for training and evaluation
     train_transforms = T.Compose.from_hydra(cfg.dataset.train_transforms)

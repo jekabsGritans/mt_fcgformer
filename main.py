@@ -1,10 +1,9 @@
-import os
-
 import hydra
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 
 import utils.transforms as T
+from deploy import deploy_model_from_config
 from eval import Tester
 from train import Trainer
 from utils.config import set_config
@@ -36,6 +35,11 @@ def main(cfg: DictConfig):
         test_dataset = instantiate(cfg.dataset.test, transform=eval_transforms, pos_weights=cfg.dataset.pos_weights)
         tester = Tester(model=model, test_dataset=test_dataset)
         tester.test()
+
+    elif cfg.mode == "deploy":
+        # Deploy model to MLflow registry
+        assert cfg.checkpoint is not None, "Must provide checkpoint for deployment"
+        deploy_model_from_config(cfg)
 
     else:
         raise ValueError(f"Unknown mode: {cfg.mode}.")

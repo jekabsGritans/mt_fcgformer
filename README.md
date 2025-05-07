@@ -7,7 +7,8 @@
     - rethin pos_weights given multilabel
 - [ ] implement fcg transformer
 - [ ] dataset registry in mlfow
-- [ ] deployable mlflow models
+
+- [ ] deploy model by 1.) logging it 2.) loading it in a different python script
 
 ## For model improvements 
 - [ ] templates for reproducible dataset generation through augmentation of existing datasets in notebooks 

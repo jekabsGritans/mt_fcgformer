@@ -1,0 +1,1 @@
+from deploy.deploy_model import deploy_model_from_config

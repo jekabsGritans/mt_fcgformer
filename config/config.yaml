@@ -35,7 +35,7 @@ tester:
 
 
 mode: null # mode is set via CLI override (train or test)
-checkpoint: # {run_id}/{checkpoint_filename}
+checkpoint: 55616055fd524588aa20b7b967969037/latest_checkpoint.pt # {run_id}/{checkpoint_filename}
 device: cuda:0
 runs_path: ./runs
 experiment_name: fcg-detection

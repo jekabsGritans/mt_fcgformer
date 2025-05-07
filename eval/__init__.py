@@ -1,1 +1,1 @@
-from eval.evaluator import Evaluator
+from eval.tester import Tester

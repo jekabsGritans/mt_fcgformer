@@ -1,13 +1,41 @@
 defaults:
   - model: ircnn
   - dataset: ftir
-  - trainer: default
-  - evaluator: default
-  - predictor: default
   - _self_
 
-mode: train
-device: cpu
-run_path: ./runs
+
+trainer:
+  lr: 1e-3
+  epochs: 10
+  batch_size: 32
+  shuffle: True
+
+  checkpoint_every: 5 # every 5 epochs
+
+  # needs to be single-threaded if we store dataset in gpu memory
+  # for cpu, can speed up by making multithreaded and settings persistent_workers, pin_memory to true
+  num_workers: 0
+  persistent_workers: False
+  pin_memory: False
+
+  validator:
+    batch_size: 32
+    num_workers: 0
+    persistent_workers: False
+    pin_memory: False
+
+
+tester:
+  batch_size: 32
+  num_workers: 0
+  persistent_workers: False
+  pin_memory: False
+
+
+mode: null # mode is set via CLI override (train or test)
+checkpoint: # {run_id}/{checkpoint_filename}
+device: cuda:0
+runs_path: ./runs
 experiment_name: functional-group-detection
 model_name: ${model}_${dataset} # we version models per dataset
+run_name: null

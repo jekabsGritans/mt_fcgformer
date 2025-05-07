@@ -16,16 +16,17 @@ class FTIRDataset(BaseDataset):
 
     nist_ids: list[int] # (num_samples,) contains the NIST IDs of the samples. not tensor because never used for prediction
 
-    def __init__(self, data_dir: str, split: str, transform: Transform | None, class_names: list[str]):
+    def __init__(self, data_dir: str, split: str, transform: Transform | None, class_names: list[str], pos_weights: list[float] | None):
             """
             Initialize the dataset.
             :param data_dir: Directory containing the dataset
             :param split: Split of the dataset to use. Can be "train", "valid", or "test".
             :param transform: Tensor->Tensor Transform to apply to the input data
             :param class_names: List
+            :param pos_weights: List of positive weights for each class. Used for BCE loss.
             """
             assert split in ["train", "valid", "test"], f"Unknown split: {split}"
-            super().__init__(transform, class_names)
+            super().__init__(transform, class_names, pos_weights)
 
             self.data_dir = data_dir
             self.split = split

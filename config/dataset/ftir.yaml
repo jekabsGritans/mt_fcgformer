@@ -16,12 +16,16 @@ test:
   class_names: [alkane, methyl, alkene, alkyne, alcohols, amines, nitriles, aromatics, alkyl halides, esters, ketones, aldehydes, carboxylic acids, ether, acyl halides, amides, nitro]
   split: test
 
+# these can be calculated using dataset.get_pos_weights()
+pos_weights: [0.45, 0.56, 6.37, 37.44, 2.71, 10.19, 21.17, 0.72, 2.61, 7.92, 9.95, 37.44, 13.12, 2.98, 93.66, 53.67, 18.22]
+
 eval_transforms:
     - _target_: utils.transforms.Normalizer
       with_std: false
 
     - _target_: utils.transforms.Resizer
       signal_size: 1024
+
 
 train_transforms:
     - _target_: utils.transforms.AddNoise

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC
 from typing import Callable
 
@@ -14,12 +16,12 @@ class BaseDataset(Dataset, ABC):
     """
 
     inputs: torch.Tensor # (num_samples, num_features)
-
     target: torch.Tensor | None # (num_samples, num_classes). one-hot encoded
-    transform: Transform | None # applied to inputs
-    class_names: list[str] | None 
 
-    def __init__(self, transform: Transform | None, class_names: list[str] | None):
+    transform: Transform # applied to inputs
+    class_names: list[str]
+
+    def __init__(self, transform: Transform, class_names: list[str], pos_weights: list[float]):
         """
         Initialize the dataset.
         """
@@ -27,32 +29,20 @@ class BaseDataset(Dataset, ABC):
 
         self.transform = transform
         self.class_names = class_names
-
-        self.target = None
-        self.class_names = None
-        self.pos_weights = None
+        self.pos_weights = torch.tensor(pos_weights, dtype=torch.float32) 
     
-    def to(self, device: torch.device):
+    def to(self, device: torch.device) -> BaseDataset:
         """
         Move the dataset to the specified device.
         :param device: Device to move the dataset to
         """
-        self.inputs = self.inputs.to(device)
+        self.inputs.to(device)
+        self.pos_weights.to(device)
+
         if self.target is not None:
-            self.target = self.target.to(device)
+            self.target.to(device)
 
-    def get_pos_weights(self) -> torch.Tensor:
-        """
-        Compute the weights needed for BCE loss to handle class imbalance.
-        """
-        if self.pos_weights is None:
-            assert self.target is not None, "Target labels are not set. Cannot compute pos weights."
-            samples_per_class = self.target.sum(dim=0)  # Number of positive samples per class
-            total_samples = self.target.shape[0]
-            neg_samples = total_samples - samples_per_class
-            self.pos_weights = neg_samples / (samples_per_class + 1e-6)  # Avoid div by 0
-
-        return self.pos_weights
+        return self
 
     def get_class_name(self, class_idx: int) -> str:
         """
@@ -78,9 +68,7 @@ class BaseDataset(Dataset, ABC):
         """
 
         inputs = self.inputs[index]
-
-        if self.transform is not None:
-            inputs = self.transform(inputs)
+        inputs = self.transform(inputs)
 
         out = {"inputs": inputs}
 

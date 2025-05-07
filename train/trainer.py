@@ -14,7 +14,7 @@ from models import BaseModel
 from utils.config import get_config
 from utils.misc import dict_to_device, is_folder_filename_path
 from utils.mlflow_utils import (download_artifact, get_run_id, upload_artifact,
-                                upload_model, upload_sync_artifacts)
+                                upload_sync_artifacts)
 
 
 class Trainer:

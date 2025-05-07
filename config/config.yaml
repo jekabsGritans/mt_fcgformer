@@ -38,6 +38,6 @@ mode: null # mode is set via CLI override (train or test)
 checkpoint: # {run_id}/{checkpoint_filename}
 device: cuda:0
 runs_path: ./runs
-experiment_name: functional-group-detection
+experiment_name: functional-group-detection-nn
 model_name: ${model.name}_${dataset.name} # we version models per dataset
 run_name: ${mode}_${model_name}_${now:%Y-%m-%d_%H-%M-%S} # a run is  "mode-model-dataset-time"

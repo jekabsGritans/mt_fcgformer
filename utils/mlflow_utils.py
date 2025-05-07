@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import urllib.parse
 
 import mlflow
 from omegaconf import OmegaConf
@@ -18,6 +19,32 @@ def get_run_id() -> str:
         raise RuntimeError("No active MLflow run found. Please start a run first.")
     return run.info.run_id
 
+def configure_mlflow_auth():
+    """
+    Configure MLflow authentication using environment variables.
+    This allows connecting to remote MLflow servers that require authentication.
+    """
+    # Get auth credentials from environment variables
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+    username = os.getenv("MLFLOW_TRACKING_USERNAME")
+    password = os.getenv("MLFLOW_TRACKING_PASSWORD")
+    
+    # If credentials are provided, add them to the tracking URI
+    if username and password:
+        print(f"Using MLflow credentials for user: {username}")
+        
+        # Parse the tracking URI to add authentication
+        parsed_uri = urllib.parse.urlparse(tracking_uri)
+        
+        # Only add auth for http/https URLs
+        if parsed_uri.scheme in ('http', 'https'):
+            netloc = f"{urllib.parse.quote(username)}:{urllib.parse.quote(password)}@{parsed_uri.netloc}"
+            tracking_uri = parsed_uri._replace(netloc=netloc).geturl()
+        
+    # Set the tracking URI for MLflow
+    mlflow.set_tracking_uri(tracking_uri)
+    
+
 def setup_mlflow() -> None:
     """
     Setup MLflow tracking for experiment.
@@ -29,8 +56,7 @@ def setup_mlflow() -> None:
 
     cfg = get_config()
 
-    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
-    mlflow.set_tracking_uri(tracking_uri)
+    configure_mlflow_auth()
     
     # Create experiment (or get existing one) 
     mlflow.set_experiment(cfg.experiment_name)

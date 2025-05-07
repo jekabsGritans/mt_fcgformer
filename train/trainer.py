@@ -12,7 +12,8 @@ from eval.metrics import (compute_exact_match_ratio, compute_overall_accuracy,
 from models import BaseModel
 from utils.config import get_config
 from utils.misc import dict_to_device, is_folder_filename_path
-from utils.mlflow_utils import download_artifact, upload_artifact, upload_model
+from utils.mlflow_utils import (download_artifact, get_run_id, upload_artifact,
+                                upload_model)
 
 
 class Trainer:
@@ -71,7 +72,8 @@ class Trainer:
             filename (str): Name of the checkpoint file (e.g. "latest_model.pt")
         """
         cfg = get_config()
-        local_path = os.path.join(cfg.run_path, filename)
+        run_id = get_run_id()
+        local_path = os.path.join(cfg.runs_path, run_id, filename)
 
         checkpoint = {
             "model_state_dict": self.model.state_dict(),

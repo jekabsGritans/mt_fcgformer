@@ -4,6 +4,7 @@
 - [x] refactor / simplify (global config, singleton MLFlowManager)
 - [x] better logging. and save log to mlflow
 - [ ] proper trainer (LR scheduling, etc.) and evaluation (per-class accuracies, visualizations, etc.)
+    - rethin pos_weights given multilabel
 - [ ] implement fcg transformer
 - [ ] dataset registry in mlfow
 - [ ] deployable mlflow models

@@ -36,11 +36,11 @@ class BaseDataset(Dataset, ABC):
         Move the dataset to the specified device.
         :param device: Device to move the dataset to
         """
-        self.inputs.to(device)
-        self.pos_weights.to(device)
+        self.inputs = self.inputs.to(device)
+        self.pos_weights = self.pos_weights.to(device)
 
         if self.target is not None:
-            self.target.to(device)
+            self.target = self.target.to(device)
 
         return self
 

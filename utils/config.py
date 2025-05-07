@@ -1,26 +1,36 @@
 """
-Global configuration module that exposes the Hydra config as a module-level variable.
+Global configuration module that exposes the Hydra config through a function.
 """
+import os
 from threading import Lock
 
 from omegaconf import DictConfig
 
-# Module-level config variable that will be set by set_cfg
-# Initially None, will be updated when set_cfg is called
-cfg: DictConfig = None # type: ignore
+# Global variable for config (private to this module)
+_config = None
+_config_lock = Lock()
 
-# Lock for thread safety when updating the config
-_cfg_lock = Lock()
-
-def set_cfg(new_cfg):
+def get_config() -> DictConfig:
     """
-    Set the global configuration.
-    This should be called at the beginning of the program
-    with the Hydra config object.
+    Get the global configuration object.
+    
+    Returns:
+        The current Hydra config object
+    
+    Raises:
+        RuntimeError: If config hasn't been set yet
+    """
+    if _config is None:
+        raise RuntimeError("Config not initialized. Call set_config() first.")
+    return _config
+
+def set_config(config):
+    """
+    Set the global configuration object.
     
     Args:
-        new_cfg: Hydra config object
+        config: The Hydra config object
     """
-    global cfg
-    with _cfg_lock:
-        cfg = new_cfg
+    global _config
+    with _config_lock:
+        _config = config

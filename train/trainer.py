@@ -10,14 +10,14 @@ from datasets import BaseDataset
 from eval.metrics import (compute_exact_match_ratio, compute_overall_accuracy,
                           compute_per_class_accuracy)
 from models import BaseModel
-from utils.config import cfg
+from utils.config import get_config
 from utils.misc import dict_to_device, is_folder_filename_path
 from utils.mlflow_utils import download_artifact, upload_artifact, upload_model
 
 
 class Trainer:
-
     def __init__(self, model: BaseModel, train_dataset: BaseDataset, val_dataset: BaseDataset):
+        cfg = get_config()
 
         self.model = model.to(cfg.device)
         self.train_dataset = train_dataset.to(cfg.device)
@@ -70,7 +70,7 @@ class Trainer:
         Args:
             filename (str): Name of the checkpoint file (e.g. "latest_model.pt")
         """
-
+        cfg = get_config()
         local_path = os.path.join(cfg.run_path, filename)
 
         checkpoint = {
@@ -91,6 +91,7 @@ class Trainer:
         Validate the model on the validation dataset.
         :return: Tuple of (average loss, average accuracy)
         """
+        cfg = get_config()
 
         assert self.val_dataset.target is not None, "Validation dataset must have targets for evaluation."
         predictions = torch.zeros_like(self.val_dataset.target, device=cfg.device) # (num_samples, num_classes) 0/1 for each class
@@ -144,7 +145,7 @@ class Trainer:
         return val_loss, overall_acc
 
     def train(self):
-
+        cfg = get_config()
         if cfg.checkpoint is not None:
             assert is_folder_filename_path(cfg.checkpoint), "Checkpoint path should be of form {run_id}/{filename}"
             run_id, filename = cfg.checkpoint.split("/")

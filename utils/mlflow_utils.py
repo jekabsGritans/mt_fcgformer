@@ -5,7 +5,7 @@ import os
 import mlflow
 from omegaconf import OmegaConf
 
-from utils.config import cfg
+from utils.config import get_config
 
 
 def get_run_id() -> str:
@@ -26,6 +26,8 @@ def setup_mlflow() -> None:
     3. Start a run
     4. Log config for reproducibility
     """
+
+    cfg = get_config()
 
     tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
     mlflow.set_tracking_uri(tracking_uri)
@@ -60,7 +62,7 @@ def download_artifact(run_id: str, filename: str) -> str:
     Returns:
         str: Local path to the downloaded artifact.
     """
-
+    cfg = get_config()
     dst_dir = os.path.join(cfg.runs_path, run_id)
 
     os.makedirs(dst_dir, exist_ok=True)

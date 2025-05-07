@@ -9,6 +9,45 @@ from omegaconf import OmegaConf
 from utils.config import get_config
 
 
+def upload_sync_artifacts() -> int:
+    """
+    Upload all artifacts in the current local run path to MLflow.
+    This is useful for synchronizing local files with MLflow tracking server.
+    
+    Returns:
+        int: Number of files uploaded
+    """
+    cfg = get_config()
+    run_id = get_run_id()
+    
+    # Get local run path
+    local_run_path = os.path.join(cfg.runs_path, run_id)
+    
+    if not os.path.isdir(local_run_path):
+        print(f"Run path does not exist: {local_run_path}")
+        return 0
+        
+    print(f"Synchronizing artifacts from {local_run_path} to MLflow run {run_id}...")
+    
+    # Track number of files uploaded
+    uploaded_count = 0
+    
+    # Get all files in the directory (no subdirectories)
+    files = [f for f in os.listdir(local_run_path) if os.path.isfile(os.path.join(local_run_path, f))]
+    
+    for file in files:
+        file_path = os.path.join(local_run_path, file)
+        try:
+            print(f"Uploading {file}...")
+            mlflow.log_artifact(file_path)
+            uploaded_count += 1
+        except Exception as e:
+            print(f"Error uploading {file}: {e}")
+    
+    print(f"Successfully uploaded {uploaded_count} artifacts to MLflow run {run_id}")
+    
+    return uploaded_count
+
 def get_run_id() -> str:
     """
     Get the current MLflow run ID.
@@ -71,7 +110,11 @@ def setup_mlflow() -> None:
     mlflow.log_params(_flatten_dict(flat_config))
 
     ## as YAML artifact for reproducibility
-    config_path = os.path.join(cfg.runs_path, "config.yaml")
+    run_id = get_run_id()
+    run_path = os.path.join(cfg.runs_path, run_id)
+    os.makedirs(run_path, exist_ok=True)
+
+    config_path = os.path.join(run_path, "config.yaml")
 
     with open(config_path, "w") as f:
         OmegaConf.save(config=cfg, f=f)
@@ -114,16 +157,6 @@ def upload_artifact(file_path: str) -> None:
     assert mlflow.active_run() is not None, "No active MLflow run found. Please start a run first."
 
     mlflow.log_artifact(file_path)
-
-def upload_model(model, model_name: str) -> None:
-    """
-    Upload final trained model to MLflow for versioning and deployment.
-
-    Args:
-        model: The trained model to save.
-        model_name (str): Name of the model.
-    """
-    raise NotImplementedError()
 
 def _flatten_dict(d, parent_key='', sep='.'):
     """

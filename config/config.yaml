@@ -12,8 +12,8 @@ trainer:
   batch_size: 32
   shuffle: True
 
-  checkpoint_interval_epochs: 5 # checkpoint every 5 epochs
-  log_interval_steps: 10 # log metrics every 10 training steps
+  checkpoint_interval_epochs: 2 # checkpoint every 2 epochs
+  log_interval_steps: 100 # log metrics every 100 training steps
 
   # needs to be single-threaded if we store dataset in gpu memory
   # for cpu, can speed up by making multithreaded and settings persistent_workers, pin_memory to true
@@ -38,6 +38,5 @@ mode: null # mode is set via CLI override (train or test)
 checkpoint: # {run_id}/{checkpoint_filename}
 device: cuda:0
 runs_path: ./runs
-experiment_name: functional-group-detection-nn
-model_name: ${model.name}_${dataset.name} # we version models per dataset
-run_name: ${mode}_${model_name}_${now:%Y-%m-%d_%H-%M-%S} # a run is  "mode-model-dataset-time"
+experiment_name: fcg-detection
+run_name: ${mode}_${model.name}_${dataset.name}_${now:%Y-%m-%d_%H-%M-%S} # a run is  "mode-model-dataset-time"

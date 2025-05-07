@@ -34,7 +34,7 @@ def main(cfg: DictConfig):
 
     elif cfg.mode == "test":
         test_dataset = instantiate(cfg.dataset.test, transform=eval_transforms, pos_weights=cfg.dataset.pos_weights)
-        tester = Tester(model=model, test_dataset=test_dataset, cfg=cfg)
+        tester = Tester(model=model, test_dataset=test_dataset)
         tester.test()
 
     else:

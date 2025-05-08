@@ -4,21 +4,21 @@
 ARG BASE_IMAGE=base-image:latest
 FROM ${BASE_IMAGE}
 
-# Build arguments passed from devcontainer.json
+# Build args for mapping host UID/GID
 ARG USERNAME=vscode
 ARG USER_UID=1000
 ARG USER_GID=1000
 
-# Create group and user with matching UID/GID
-RUN groupadd --gid ${USER_GID} ${USERNAME} \
-  && useradd --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME}
+# Create (or duplicate) group & user at exactly the host's UID/GID
+RUN groupadd -g ${USER_GID} -o ${USERNAME} \
+ && useradd  -u ${USER_UID} -o -g ${USER_GID} -m ${USERNAME}
 
-# Optional: install dev tools
+# Install some dev tools
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       git curl vim && \
     rm -rf /var/lib/apt/lists/*
 
-# Set user and working directory
+# Switch to the non-root user
 USER ${USERNAME}
 WORKDIR /workspace

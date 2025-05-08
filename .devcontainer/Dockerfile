@@ -1,7 +1,8 @@
 # .devcontainer/Dockerfile
 
-# Inherit from your already-built base image
-FROM base-image:latest
+# Allow the base image to be passed in via build arg
+ARG BASE_IMAGE=base-image:latest
+FROM ${BASE_IMAGE}
 
 # Build arguments passed from devcontainer.json
 ARG USERNAME=vscode
@@ -12,10 +13,10 @@ ARG USER_GID=1000
 RUN groupadd --gid ${USER_GID} ${USERNAME} \
   && useradd --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME}
 
-# Optional: install some dev tools
+# Optional: install dev tools
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    git curl vim && \
+      git curl vim && \
     rm -rf /var/lib/apt/lists/*
 
 # Set user and working directory

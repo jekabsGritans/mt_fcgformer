@@ -1,42 +1,35 @@
-// For format details, see https://aka.ms/devcontainer.json
+// .devcontainer/devcontainer.json
 {
 	"name": "MyProject Dev Container",
   
-	// Use a single Dockerfile rather than Docker Compose
 	"build": {
 	  "dockerfile": "Dockerfile",
 	  "context": "..",
 	  "args": {
-		// Match the host user’s UID and GID so mounted files are writable
+		"BASE_IMAGE": "base-image:latest",
 		"USER_UID": "${localEnv:UID}",
 		"USER_GID": "${localEnv:GID}"
 	  }
 	},
   
-	// Where VS Code will open inside the container
 	"workspaceFolder": "/workspace",
   
-	// Bind-mount your project into the container for live edits
 	"mounts": [
 	  "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached"
 	],
   
-	// Run as the non-root vscode user created in the Dockerfile
 	"remoteUser": "vscode",
   
-	// Inject your env vars (pulled from your host .env or shell)
 	"containerEnv": {
 	  "MLFLOW_TRACKING_URI": "${localEnv:MLFLOW_TRACKING_URI}",
 	  "MLFLOW_TRACKING_USERNAME": "${localEnv:MLFLOW_TRACKING_USERNAME}",
 	  "MLFLOW_TRACKING_PASSWORD": "${localEnv:MLFLOW_TRACKING_PASSWORD}"
 	},
   
-	// Pass --gpus all (or however many) to docker run
 	"runArgs": [
 	  "--gpus=all"
 	],
   
-	// Custom VS Code settings & extensions
 	"customizations": {
 	  "vscode": {
 		"extensions": [

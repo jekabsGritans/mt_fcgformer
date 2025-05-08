@@ -23,6 +23,7 @@ build-train: build-base
 	docker build \
 	  -f Dockerfile.train \
 	  -t $(TRAIN_IMAGE) \
+	  --build-arg BASE_IMAGE=$(BASE_IMAGE) \
 	  .
 
 # Build the devcontainer image (depends on base)
@@ -31,6 +32,7 @@ build-dev: build-base
 	docker build \
 	  -f .devcontainer/Dockerfile \
 	  -t $(DEV_IMAGE) \
+	  --build-arg BASE_IMAGE=$(BASE_IMAGE) \
 	  .
 
 # Remove local images

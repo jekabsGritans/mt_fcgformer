@@ -1,8 +1,9 @@
 # Dockerfile.train
-# Inherit from your NVIDIA-based base image
-FROM base-image:latest
 
-# Set working directory
+# Allow override of the base image tag
+ARG BASE_IMAGE=base-image:latest
+FROM ${BASE_IMAGE}
+
 WORKDIR /workspace
 
 # Bake in the full source for training

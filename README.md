@@ -42,4 +42,8 @@
 - `.devcontainer/Dockerfile` also adds a non-root user and installs dev tools
 - For the dev-container, MLFlow authentication environment variables are loaded from local `.env` or your shell
 - For deploying jobs, will need to specify in the deployment command, along with hyparams
-- `make build-base/build-train/build-dev` can be used to build the images as needed.
+
+## Building docker images
+- `make` build all 3 docker images. 
+- can use args `build-base/build-train/build-dev` to only build some
+- `make clean` removes the images

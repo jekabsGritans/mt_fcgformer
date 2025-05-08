@@ -24,6 +24,8 @@ Finish this today/tmrw
 
 - [ ] log git hash for training code of a run
 
+- [ ] logs instead of prints, and also resource usage logs, upload as artifacts
+
 ------------------------------------------------------
 - [ ] improve documentation
 

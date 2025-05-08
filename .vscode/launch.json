@@ -5,6 +5,18 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "train",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "mode=train",
+                "device=cpu",
+                "experiment_name=debug"
+            ]
+        },
+        {
             "name": "train (cuda)",
             "type": "debugpy",
             "request": "launch",
@@ -12,7 +24,21 @@
             "console": "integratedTerminal",
             "args": [
                 "mode=train",
-                "device=cuda:0"
+                "device=cuda:0",
+                "experiment_name=debug"
+            ]
+        },
+        {
+            "name": "test",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "mode=test",
+                "device=cpu",
+                "checkpoint=55616055fd524588aa20b7b967969037/best_checkpoint.pt",
+                "experiment_name=debug"
             ]
         },
         {
@@ -24,7 +50,8 @@
             "args": [
                 "mode=test",
                 "device=cuda:0",
-                "checkpoint=55616055fd524588aa20b7b967969037/best_checkpoint.pt"
+                "checkpoint=55616055fd524588aa20b7b967969037/best_checkpoint.pt",
+                "experiment_name=debug"
             ]
         },
          {
@@ -35,7 +62,8 @@
             "console": "integratedTerminal",
             "args": [
                 "mode=deploy",
-                "checkpoint=55616055fd524588aa20b7b967969037/best_checkpoint.pt"
+                "checkpoint=55616055fd524588aa20b7b967969037/best_checkpoint.pt",
+                "experiment_name=debug"
             ]
         },       
     ]

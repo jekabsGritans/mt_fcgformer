@@ -16,8 +16,27 @@
 - [ ] clean up repo and improve docs
 
 
+## Goals now
+1. deployed model with defined multi-output dictionary
+2. datasets via generating notebooks and mlflow
+    - incl git hash tracking
+    - single dataset class
+3. proper training
+4. logging not printing and artifact config upload to mlflow.
+    - also log system stats to see if gpu optimized
+
+
 ## Datasets
 ### FTIR
 - to use the FTIR dataset used in the FCG-Former paper:
     - download `dataset.zip` from https://huggingface.co/datasets/lycaoduong/FTIR/tree/main 
     - unzip it in `data/ftir`
+
+
+## Docker
+- `./Dockerfile.base` only installs dependencies
+- `./Dockerfile.train` also copies over files. Used to build an image for a training job deployable to cloud.
+- `.devcontainer/Dockerfile` also adds a non-root user and installs dev tools
+- For the dev-container, MLFlow authentication environment variables are loaded from local `.env` or your shell
+- For deploying jobs, will need to specify in the deployment command, along with hyparams
+- `make build-base/build-train/build-dev` can be used to build the images as needed.

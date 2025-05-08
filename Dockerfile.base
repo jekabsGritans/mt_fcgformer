@@ -1,0 +1,20 @@
+# Dockerfile.base
+
+# Use NVIDIA PyTorch image as base
+FROM nvcr.io/nvidia/pytorch:25.03-py3
+
+# Set working directory
+WORKDIR /workspace
+
+# Install any additional system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      build-essential git vim curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python dependencies
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Default to bash
+CMD ["bash"]

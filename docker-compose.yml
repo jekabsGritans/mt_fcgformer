@@ -13,12 +13,14 @@ services:
     volumes:
       - .:/workspace           # optional: mount local code into container
     working_dir: /workspace
-    command: >
+    command: > # this is just for local testing. Vast.ai deployments will override the command
       python main.py
+      device=cpu
       mode=train
       trainer.epochs=5
       model=ircnn
       dataset=ftir
+      experiment_name=debug
     deploy:
       resources:
         reservations:

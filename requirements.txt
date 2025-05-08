@@ -1,4 +1,4 @@
-torch
+# torch # this is included in the base image
 numpy
 matplotlib
 hydra-core

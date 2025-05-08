@@ -1,0 +1,12 @@
+# Dockerfile.train
+# Inherit from your NVIDIA-based base image
+FROM base-image:latest
+
+# Set working directory
+WORKDIR /workspace
+
+# Bake in the full source for training
+COPY . .
+
+# Default entrypoint
+ENTRYPOINT ["python3", "main.py"]

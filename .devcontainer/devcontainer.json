@@ -8,7 +8,7 @@
 	  "args": {
 		"BASE_IMAGE": "base-image:latest",
 		"USER_UID": "${localEnv:UID:1000}",
-		"USER_GID": "${localEnv:GID:1000}",
+		"USER_GID": "${localEnv:GID:1000}"
 	  }
 	},
   

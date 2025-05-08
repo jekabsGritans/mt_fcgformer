@@ -2,8 +2,14 @@
 defaults:
   - model: ircnn
   - dataset: ftir
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
   - _self_
 
+hydra:
+  run:
+    dir: .
+  output_subdir: null
 
 # The below settings are used by modules as they wish (i.e. no auto-instantiation)
 trainer:

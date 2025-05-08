@@ -1,4 +1,7 @@
 ## TODO
+- [ ] register datasets and download them from mlflow instead of manually
+- [ ] rebuild images without datasets, document how this can be done on other devices
+- [ ]
 - [ ] figure out model deployment via standalone code. 
     - [ ] resolve warnings
     - [ ] add input/output schemas and descriptions

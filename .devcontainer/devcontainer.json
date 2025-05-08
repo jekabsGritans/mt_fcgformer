@@ -5,7 +5,12 @@
 	// Use a single Dockerfile rather than Docker Compose
 	"build": {
 	  "dockerfile": "Dockerfile",
-	  "context": ".."
+	  "context": "..",
+	  "args": {
+		// Match the host user’s UID and GID so mounted files are writable
+		"USER_UID": "${localEnv:UID}",
+		"USER_GID": "${localEnv:GID}"
+	  }
 	},
   
 	// Where VS Code will open inside the container
@@ -18,17 +23,17 @@
   
 	// Run as the non-root vscode user created in the Dockerfile
 	"remoteUser": "vscode",
-
+  
 	// Inject your env vars (pulled from your host .env or shell)
 	"containerEnv": {
-		"MLFLOW_TRACKING_URI": "${localEnv:MLFLOW_TRACKING_URI}",
-		"MLFLOW_TRACKING_USERNAME": "${localEnv:MLFLOW_TRACKING_USERNAME}",
-		"MLFLOW_TRACKING_PASSWORD": "${localEnv:MLFLOW_TRACKING_PASSWORD}"
+	  "MLFLOW_TRACKING_URI": "${localEnv:MLFLOW_TRACKING_URI}",
+	  "MLFLOW_TRACKING_USERNAME": "${localEnv:MLFLOW_TRACKING_USERNAME}",
+	  "MLFLOW_TRACKING_PASSWORD": "${localEnv:MLFLOW_TRACKING_PASSWORD}"
 	},
-
+  
 	// Pass --gpus all (or however many) to docker run
 	"runArgs": [
-		"--gpus=all"
+	  "--gpus=all"
 	],
   
 	// Custom VS Code settings & extensions
@@ -41,7 +46,8 @@
 		  "ms-toolsai.jupyter",
 		  "ms-python.vscode-pylance",
 		  "ms-python.debugpy",
-		  "ms-azuretools.vscode-docker"
+		  "ms-azuretools.vscode-docker",
+		  "ms-vscode.makefile-tools"
 		],
 		"settings": {
 		  "python.defaultInterpreterPath": "/usr/bin/python"

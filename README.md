@@ -1,32 +1,40 @@
 ## TODO
-- [ ] register datasets and download them from mlflow instead of manually
-- [ ] rebuild images without datasets, document how this can be done on other devices
-- [ ]
-- [ ] figure out model deployment via standalone code. 
-    - [ ] resolve warnings
-    - [ ] add input/output schemas and descriptions
-- [ ] improve evaluation, incl neater (in terms of mlflowui) per-class organisation, recall, precission, etc.
-- [ ] improve training (LR scheduling and good optimizer)
-    - [ ] pos weights implemented correctly?
-- [ ] dataset registry and versioning
-- [ ] implement and train fcg transformer
-- [ ] visualize attention
-- [ ] templates for reproducible dataset generation through augmentation of existing datasets in notebooks 
+
+Finish this today/tmrw
+-----------------------------------------------------
+- [ ] Dataset versioning
+    - each dataset is generated in a jupyter notebook and, as final step, optionally uploaded to mlflow
+    - these notebook should have no dependencies (copy over utils to previous cells)
+    - Each dataset has a special mlflow experiment, where a run is a generation of a particular version of the dataset.
+    - The run uploads the generated dataset + notebook as artifacts in the end
+        - (not hash but actual notebook, so that this works without git pushes. prolly implement by literally reading current file)
+        - also, in the notebook,  include docs on how to get the raw data for running the notebook i
     - 2 kinds of transforms:
         - simple augmentations like adding noise, done at training time
         - theory-based augmentations to expand dataset at time of versioned dataset generation
-- [ ] implement and train mt_fcg transformer
-- [ ] clean up repo and improve docs
 
+- [ ] single class for loading those datasets for train/test
+    - probably means that they should be stored in a standardized format like csv
 
-## Goals now
-1. deployed model with defined multi-output dictionary
-2. datasets via generating notebooks and mlflow
-    - incl git hash tracking
-    - single dataset class
-3. proper training
-4. logging not printing and artifact config upload to mlflow.
-    - also log system stats to see if gpu optimized
+- [ ] rebuild images without datasets
+
+- [ ] figure out model deployment
+    - probably through log_model in mlflow but then figure out errors and dict outputs
+    - add input/output schemas and descriptions
+
+- [ ] log git hash for training code of a run
+
+------------------------------------------------------
+- [ ] improve documentation
+
+- [ ] improve evaluation, incl neater (in terms of mlflowui) per-class organisation, recall, precission and visualizations (confusion mat)
+
+- [ ] improve training (LR scheduling and good optimizer)
+    - [ ] pos weights implemented correctly?
+
+- [ ] implement and train fcg transformer
+
+- [ ] visualize attention
 
 
 ## Datasets

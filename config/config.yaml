@@ -1,7 +1,6 @@
-# Models / datasets use configs for auto-instantiation of objects, so those have strict structure
+# Models use configs for auto-instantiation of objects, so those have strict structure
 defaults:
   - model: ircnn
-  - dataset: ftir
   - override hydra/hydra_logging: disabled
   - override hydra/job_logging: disabled
   - _self_
@@ -11,7 +10,9 @@ hydra:
     dir: .
   output_subdir: null
 
-# The below settings are used by modules as they wish (i.e. no auto-instantiation)
+# The MLFlow run id of the dataset
+dataset: 7bb299184c1941ec90459eb11f1409eb
+
 trainer:
   lr: 1e-3
   epochs: 10

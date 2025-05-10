@@ -24,24 +24,26 @@ class MLFlowDataset(Dataset):
     transform: Transform | None # applied to inputs
     class_names: list[str]
 
-    def __init__(self, dataset_id: str, transform: Transform | None = None):
+    def __init__(self, dataset_id: str, split: str, transform: Transform | None = None):
         """
         Initialize the dataset.
         Args:
             dataset_id (str): MLFlow run ID of the dataset to download.
+            split (str): Split of the dataset to download (train, val, test).
             transform (Transform | None): Transform to apply to the inputs.
         """
         super().__init__()
         self.dataset_id = dataset_id
         self.transform = transform
+        self.split = split
         self.download()
 
     def download(self):
         local_dir = mlflow.artifacts.download_artifacts(run_id=self.dataset_id)
-        inputs_path = os.path.join(local_dir, "inputs.npy")
-        target_path = os.path.join(local_dir, "target.npy")
+        inputs_path = os.path.join(local_dir, f"{self.split}_inputs.npy")
+        target_path = os.path.join(local_dir, f"{self.split}_target.npy")
         target_names_path = os.path.join(local_dir, "target_names.txt")
-        pos_counts_path = os.path.join(local_dir, "pos_counts.txt")
+        pos_counts_path = os.path.join(local_dir, f"{self.split}_pos_counts.txt")
 
         # verify all exist
         for path in [inputs_path, target_path, target_names_path, pos_counts_path]:

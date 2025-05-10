@@ -4,3 +4,5 @@ outputs/
 .env
 runs/
 venv/
+**/*.pyc
+**/.ipynb_checkpoints

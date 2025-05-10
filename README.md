@@ -13,6 +13,8 @@ Finish this today/tmrw
         - simple augmentations like adding noise, done at training time
         - theory-based augmentations to expand dataset at time of versioned dataset generation
 
+- [ ] SYNC CLEARLY WITH TEAM FOR DATASET CREATION PATTERNS
+
 - [ ] single class for loading those datasets for train/test
     - probably means that they should be stored in a standardized format like csv
 

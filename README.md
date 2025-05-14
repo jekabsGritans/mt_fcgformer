@@ -2,24 +2,7 @@
 
 Finish this today/tmrw
 -----------------------------------------------------
-<<<<<<< HEAD
-- [ ] make deployment schemas work
-- [ ] make datasets be stored as pandas dataframes. preprocessing can be done on a training-run level
-
-
-- [ ] Dataset versioning
-    - each dataset is generated in a jupyter notebook and, as final step, optionally uploaded to mlflow
-    - these notebook should have no dependencies (copy over utils to previous cells)
-    - Each dataset has a special mlflow experiment, where a run is a generation of a particular version of the dataset.
-    - The run uploads the generated dataset + notebook as artifacts in the end
-        - (not hash but actual notebook, so that this works without git pushes. prolly implement by literally reading current file)
-        - also, in the notebook,  include docs on how to get the raw data for running the notebook i
-    - 2 kinds of transforms:
-        - simple augmentations like adding noise, done at training time
-        - theory-based augmentations to expand dataset at time of versioned dataset generation
-=======
 - [ ] fix config and main, simplify if can
->>>>>>> c9e67aacb6a1df4ea0423ab5ba270e44b5dbf826
 
 - [ ] rebuild images without datasets and test all 3 modes
 

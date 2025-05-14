@@ -15,9 +15,12 @@ class NeuralNetworkModule(nn.Module, ABC):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
-        
+        self.set_pos_weights(pos_weights)
+    
+    def set_pos_weights(self, pos_weights: list[float] | None = None):
+        """Set weights for BCE loss"""
         if pos_weights is None:
-            pos_weights = [1.0] * output_dim
+            pos_weights = [1.0] * self.output_dim
             
         torch_pos_weights = torch.tensor(pos_weights, dtype=torch.float32)
         self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=torch_pos_weights)

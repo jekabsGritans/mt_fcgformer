@@ -22,6 +22,7 @@ class MLFlowDataset(Dataset):
 
     transform: Transform | None # applied to inputs
     target_names: list[str]
+    pos_weights: torch.Tensor # (num_targets,)
 
     def __init__(self, dataset_id: str, split: str, transform: Transform | None = None):
         """

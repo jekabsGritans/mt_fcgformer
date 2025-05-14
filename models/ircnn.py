@@ -27,16 +27,16 @@ class OutputRow(TypedDict):
 class IrCNNModule(NeuralNetworkModule):
     """Neural network architecture for IrCNN"""
     
-    def __init__(self, input_dim: int, output_dim: int, pos_weights: list[float] | None, kernel_size: int, dropout_p: float):
+    def __init__(self, input_dim: int, output_dim: int, kernel_size: int, dropout_p: float, pos_weights: list[float] | None = None):
         """
         Initialize IrCNN neural network.
         
         Args:
             input_dim: Input dimension (number of features)
             output_dim: Output dimension (number of classes)
-            pos_weights: Positive weights for BCE loss
             kernel_size: Kernel size for the convolutional layers (hyperparameter)
             dropout_p: Dropout probability (hyperparameter)
+            pos_weights: Positive weights for BCE loss
         """
         super().__init__(input_dim, output_dim, pos_weights)
         

@@ -6,6 +6,5 @@ init:
   _target_: models.ircnn.IrCNN
   input_dim: 1024
   output_dim: 17
-  pos_weights: null
   kernel_size: 11
   dropout_p: 0.48599073736368

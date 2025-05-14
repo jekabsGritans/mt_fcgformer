@@ -20,6 +20,10 @@ def main(cfg: DictConfig):
     do_log_config = cfg.mode in ["train", "test"]
     start_run(cfg, log_config=do_log_config)
 
+    # dataset-specific transforms for training and evaluation
+    train_transforms = T.Compose.from_hydra(cfg.dataset.train_transforms)
+    eval_transforms = T.Compose.from_hydra(cfg.dataset.eval_transforms)
+
     # init model
     model = instantiate(cfg.model.init, pos_weights=cfg.dataset.pos_weights)
 

@@ -4,12 +4,10 @@ import os
 import urllib.parse
 
 import mlflow
-from omegaconf import OmegaConf
-
-from utils.config import get_config
+from omegaconf import DictConfig, OmegaConf
 
 
-def upload_sync_artifacts() -> int:
+def upload_sync_artifacts(cfg: DictConfig) -> int:
     """
     Upload all artifacts in the current local run path to MLflow.
     This is useful for synchronizing local files with MLflow tracking server.
@@ -17,7 +15,6 @@ def upload_sync_artifacts() -> int:
     Returns:
         int: Number of files uploaded
     """
-    cfg = get_config()
     run_id = get_run_id()
     
     # Get local run path
@@ -83,8 +80,7 @@ def configure_mlflow_auth():
     # Set the tracking URI for MLflow
     mlflow.set_tracking_uri(tracking_uri)
     
-
-def start_run(log_config: bool = True) -> None:
+def start_run(cfg: DictConfig, log_config: bool = True) -> None:
     """
     Setup MLflow tracking for experiment.
     1. Connect to MLflow server
@@ -92,8 +88,6 @@ def start_run(log_config: bool = True) -> None:
     3. Start a run
     4. Log config for reproducibility
     """
-
-    cfg = get_config()
 
     # Create experiment (or get existing one) 
     mlflow.set_experiment(cfg.experiment_name)
@@ -120,7 +114,7 @@ def start_run(log_config: bool = True) -> None:
 
         upload_artifact(config_path) # saves to runs:/{current_run_id}/config.yaml
 
-def download_artifact(run_id: str, filename: str) -> str:
+def download_artifact(cfg: DictConfig, run_id: str, filename: str) -> str:
     """
     Download an artifact from a specific MLflow run.
 
@@ -130,7 +124,6 @@ def download_artifact(run_id: str, filename: str) -> str:
     Returns:
         str: Local path to the downloaded artifact.
     """
-    cfg = get_config()
     dst_dir = os.path.join(cfg.runs_path, run_id)
 
     os.makedirs(dst_dir, exist_ok=True)

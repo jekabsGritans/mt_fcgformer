@@ -1,10 +1,11 @@
 # Models / datasets use configs for auto-instantiation of objects, so those have strict structure
 defaults:
   - model: ircnn
-  - dataset: ftir
   - override hydra/hydra_logging: disabled
   - override hydra/job_logging: disabled
   - _self_
+
+dataset: 
 
 hydra:
   run:
@@ -46,3 +47,40 @@ device: cuda:0
 runs_path: ./runs
 experiment_name: fcg-detection
 run_name: ${mode}_${model.name}_${dataset.name}_${now:%Y-%m-%d_%H-%M-%S} # a run is  "mode-model-dataset-time"
+
+# only applied to spectrum
+# these are fixed for the most part
+# kwargs for auto-instantiation of sequential transformations
+eval_transforms:
+    - _target_: utils.transforms.Normalizer
+      with_std: false
+
+    - _target_: utils.transforms.Resizer
+      signal_size: 1024
+
+train_transforms:
+    - _target_: utils.transforms.AddNoise
+      prob: 0.3
+      snr_range: [2, 20]
+      mean_noise: 0.0
+
+    - _target_: utils.transforms.Revert
+      prob: 0.3
+
+    - _target_: utils.transforms.MaskZeros
+      prob: 0.3
+      mask_p: [0.01, 0.15]
+
+    - _target_: utils.transforms.ShiftLR
+      prob: 0.3
+      shift_p: [0.01, 0.1]
+
+    - _target_: utils.transforms.ShiftUD
+      prob: 0.3
+      shift_p: [0.01, 0.1]
+
+    - _target_: utils.transforms.Normalizer
+      with_std: false
+
+    - _target_: utils.transforms.Resizer
+      signal_size: 1024

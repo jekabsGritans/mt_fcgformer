@@ -2,6 +2,10 @@
 
 Finish this today/tmrw
 -----------------------------------------------------
+- [ ] make deployment schemas work
+- [ ] make datasets be stored as pandas dataframes. preprocessing can be done on a training-run level
+
+
 - [ ] Dataset versioning
     - each dataset is generated in a jupyter notebook and, as final step, optionally uploaded to mlflow
     - these notebook should have no dependencies (copy over utils to previous cells)

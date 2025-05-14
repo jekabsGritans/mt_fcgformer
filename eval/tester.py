@@ -1,13 +1,13 @@
 import mlflow
 import torch
+from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from datasets import BaseDataset
+from datasets import MLFlowDataset
 from eval.metrics import (compute_exact_match_ratio, compute_overall_accuracy,
                           compute_per_class_accuracy)
 from models import BaseModel
-from utils.config import get_config
 from utils.misc import dict_to_device
 from utils.mlflow_utils import download_artifact
 
@@ -16,10 +16,9 @@ class Tester:
     """
     This evaluates the model on the test dataset.
     """
-    def __init__(self, model: BaseModel, test_dataset: BaseDataset):
-        cfg = get_config()
-
-        self.model = model.to(cfg.device)
+    def __init__(self, model: BaseModel, test_dataset: MLFlowDataset, cfg: DictConfig):
+        self.model = model
+        self.model.neural_net = self.model.neural_net.to(cfg.device)
         self.dataset = test_dataset.to(cfg.device)
 
         self.data_loader = DataLoader(
@@ -28,6 +27,8 @@ class Tester:
             pin_memory=cfg.tester.pin_memory, persistent_workers=cfg.tester.persistent_workers
         )
 
+        self.cfg = cfg
+
     def load_checkpoint(self, checkpoint_path: str):
         """
         Load model state from checkpoint.
@@ -35,7 +36,7 @@ class Tester:
             checkpoint_path (str): Local path to the checkpoint file.
         """
         checkpoint = torch.load(checkpoint_path)
-        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.model.neural_net.load_state_dict(checkpoint["model_state_dict"])
     
     def download_checkpoint(self, run_id: str, filename: str):
         """
@@ -44,7 +45,7 @@ class Tester:
             run_id (str): MLFlow run ID.
             filename (str): Name of the checkpoint file (e.g. "latest_model.pt")
         """
-        local_path = download_artifact(run_id=run_id, filename=filename)
+        local_path = download_artifact(cfg=self.cfg, run_id=run_id, filename=filename)
         self.load_checkpoint(local_path)
 
     def test(self):
@@ -55,16 +56,14 @@ class Tester:
 
         assert self.dataset.target is not None, "Test dataset must have targets for evaluation."
 
-        cfg = get_config()
+        predictions = torch.zeros_like(self.dataset.target, device=self.cfg.device) # (num_samples, num_classes) 0/1 for each class
 
-        predictions = torch.zeros_like(self.dataset.target, device=cfg.device) # (num_samples, num_classes) 0/1 for each class
-
-        self.model.eval()
+        self.model.neural_net.eval()
 
         with torch.no_grad():
             start_idx = 0
             for batch in tqdm(self.data_loader, desc="Testing", unit="batch"):
-                batch = dict_to_device(batch, cfg.device)
+                batch = dict_to_device(batch, self.cfg.device)
                 step_out = self.model.step(batch)
                 logits = step_out["logits"] 
 

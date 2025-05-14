@@ -3,9 +3,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 import torch
-from hydra.utils import instantiate
-from omegaconf import DictConfig, ListConfig
 import torch.nn.functional as F
+from hydra.utils import instantiate
+from omegaconf import ListConfig
 
 
 class Transform(ABC):

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from abc import ABC
 from typing import Callable
 
 import mlflow
@@ -22,7 +21,7 @@ class MLFlowDataset(Dataset):
     target: torch.Tensor# (num_samples, output_features)
 
     transform: Transform | None # applied to inputs
-    class_names: list[str]
+    target_names: list[str]
 
     def __init__(self, dataset_id: str, transform: Transform | None = None):
         """

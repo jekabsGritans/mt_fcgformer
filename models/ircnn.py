@@ -5,26 +5,44 @@ Original Model (Keras Based): https://github.com/gj475/irchracterizationcnn
 Pytorch Reimplementation: https://github.com/lycaoduong/FcgFormer
 """
 
+from typing import Any, TypedDict
+
+import numpy as np
 import torch
 import torch.nn as nn
+from mlflow.types import ColSpec, DataType, Schema, TensorSpec
+from mlflow.types.schema import Array
 
-from models.base_model import BaseModel
+from models.base_model import BaseModel, NeuralNetworkModule
 
 
-class IrCNN(BaseModel):
+class InputRow(TypedDict):
+    spectrum: np.ndarray  # (input_dim,)
+    threshold: float
+
+class OutputRow(TypedDict):
+    positive_targets: list[str]
+    positive_probabilities: list[float]
+
+class IrCNNModule(NeuralNetworkModule):
+    """Neural network architecture for IrCNN"""
+    
     def __init__(self, input_dim: int, output_dim: int, pos_weights: list[float] | None, kernel_size: int, dropout_p: float):
         """
-        :param input_dim: Input dimension (number of features)
-        :param output_dim: Output dimension (number of classes)
-
-        :param kernel_size: Kernel size for the convolutional layers (hyperparameter)
-        :param dropout_p: Dropout probability (hyperparameter)
+        Initialize IrCNN neural network.
+        
+        Args:
+            input_dim: Input dimension (number of features)
+            output_dim: Output dimension (number of classes)
+            pos_weights: Positive weights for BCE loss
+            kernel_size: Kernel size for the convolutional layers (hyperparameter)
+            dropout_p: Dropout probability (hyperparameter)
         """
         super().__init__(input_dim, output_dim, pos_weights)
+        
+        in_ch = 1  # this is fixed for our repository
 
-        in_ch = 1 # this is fixed for our repository
-
-        # 1st CNN layer.
+        # 1st CNN layer
         self.CNN1 = nn.Sequential(
             nn.Conv1d(in_channels=in_ch, out_channels=31, kernel_size=kernel_size, stride=1, padding=0),
             nn.BatchNorm1d(num_features=31),
@@ -32,7 +50,8 @@ class IrCNN(BaseModel):
             nn.MaxPool1d(kernel_size=2, stride=2)
         )
         self.cnn1_size = int(((input_dim - kernel_size + 1 - 2) / 2) + 1)
-        # 2nd CNN layer.
+        
+        # 2nd CNN layer
         self.CNN2 = nn.Sequential(
             nn.Conv1d(in_channels=31, out_channels=62, kernel_size=kernel_size, stride=1, padding=0),
             nn.BatchNorm1d(num_features=62),
@@ -41,20 +60,17 @@ class IrCNN(BaseModel):
         )
         self.cnn2_size = int(((self.cnn1_size - kernel_size + 1 - 2) / 2) + 1)
 
-        # 1st dense layer.
+        # Dense layers
         self.DENSE1 = nn.Sequential(
             nn.Linear(in_features=self.cnn2_size * 62, out_features=4927),
             nn.ReLU(),
             nn.Dropout(p=dropout_p)
         )
-
-        # 2st dense layer.
         self.DENSE2 = nn.Sequential(
             nn.Linear(in_features=4927, out_features=2785),
             nn.ReLU(),
             nn.Dropout(p=dropout_p)
         )
-        # 3st dense layer.
         self.DENSE3 = nn.Sequential(
             nn.Linear(in_features=2785, out_features=1574),
             nn.ReLU(),
@@ -75,3 +91,103 @@ class IrCNN(BaseModel):
         x = self.FCN(x)
         x = torch.squeeze(x, dim=1)
         return x
+
+
+class IrCNN(BaseModel):
+    
+    def __init__(self, input_dim: int, output_dim: int, target_names: list[str], pos_weights: list[float] | None, kernel_size: int, dropout_p: float):
+        """
+        Initialize IrCNN model.
+        
+        Args:
+            input_dim: Input dimension (number of features)
+            output_dim: Output dimension (number of classes)
+            target_names: Names of the target labels
+            pos_weights: Positive weights for BCE loss
+            kernel_size: Kernel size for the convolutional layers (hyperparameter)
+            dropout_p: Dropout probability (hyperparameter)
+        """
+        # Create neural network module
+        neural_net = IrCNNModule(input_dim, output_dim, pos_weights, kernel_size, dropout_p)
+        
+        # Define MLflow schemas
+        input_schema = Schema([
+            TensorSpec(
+                type=np.dtype(np.float32),
+                shape=(input_dim,),
+                name="spectrum"
+            ),
+            ColSpec(
+                type=DataType.double,
+                name="threshold"
+            )
+        ])
+
+        output_schema = Schema([
+            ColSpec(
+                type=Array("string"),
+                name="positive_targets",
+            ),
+            ColSpec(
+                type=Array("double"),
+                name="positive_probabilities"
+            ),
+        ])
+
+        input_example = (
+            [
+                {
+                    "spectrum": np.zeros(input_dim, dtype=np.float32)
+                }
+            ],
+            {"threshold": 0.5}
+        )
+        
+        super().__init__(neural_net, target_names, input_schema, output_schema, input_example)
+
+    # MLFlow
+    def predict(self, context, model_input: list[InputRow], params: dict[str, Any] | None = None):
+        """
+        Make predictions with the model.
+        
+        Args:
+            context: MLflow context
+            model_input: List of input rows
+            params: Additional parameters
+            
+        Returns:
+            List of predictions
+        """
+        threshold = params.get("threshold", 0.5) if params else 0.5
+        results = []
+        
+        for row in model_input:
+            spectrum = torch.tensor(row["spectrum"], dtype=torch.float32)
+            spectrum = spectrum.unsqueeze(0)
+            logits = self.neural_net.forward(spectrum)
+            probabilities = torch.sigmoid(logits).squeeze(0).tolist()
+
+            out_probs, out_targets = [], []
+            for prob, target in zip(probabilities, self.target_names):
+                if prob > threshold:
+                    out_probs.append(prob)
+                    out_targets.append(target)
+            
+            results.append({
+                "positive_targets": out_targets, 
+                "positive_probabilities": out_probs
+            })
+        
+        return results
+        
+    def load_context(self, context):
+        """
+        Load model weights from MLflow artifacts.
+        
+        Args:
+            context: MLflow context
+        """
+        checkpoint_path = context.artifacts["checkpoint"]
+        state_dict = torch.load(checkpoint_path, map_location="cpu")
+        self.neural_net.load_state_dict(state_dict)
+        self.neural_net.eval()

@@ -46,12 +46,13 @@ def deploy_model_from_config(cfg: DictConfig):
         artifact_path="model",
         python_model=model,
         artifacts={"model_config": config_uri, "model_checkpoint": checkpoint_uri},
-        code_path=..., # TODO: pass code and dependencies such that loadable via raw MLflow
+        code_paths=["models"],
         signature=model._signature,
         input_example=model._input_example,
         registered_model_name=model_name,
+        pip_requirements=["-r requirements.txt"],
         metadata={
-            "checkpoint": cfg.checkpoin,
+            "checkpoint": cfg.checkpoint,
         }
     )
     

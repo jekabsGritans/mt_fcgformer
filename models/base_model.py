@@ -3,8 +3,9 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+from mlflow.models import ModelSignature
 from mlflow.pyfunc import PythonModel  # type: ignore
-from mlflow.types import Schema
+from omegaconf import DictConfig, OmegaConf
 
 
 # Define neural network module for the model architecture
@@ -33,6 +34,20 @@ class NeuralNetworkModule(nn.Module, ABC):
     def compute_loss(self, logits, targets):
         return self.loss_fn(logits, targets.float())
 
+    def step(self, batch: dict) -> dict:
+        """
+        Perform a single forward pass on a batch and return the loss.
+        """
+        x = batch["inputs"]
+        y = batch["target"]
+        logits = self.forward(x)
+        loss = self.compute_loss(logits, y)
+        
+        return {
+            "logits": logits,
+            "loss": loss,
+        }
+
 
 class BaseModel(PythonModel, ABC):
     """
@@ -43,54 +58,46 @@ class BaseModel(PythonModel, ABC):
     
     This class serves as the MLflow PyFuncModel wrapper around a neural network.
     """
+
+    neural_net: NeuralNetworkModule
+    target_names: list[str]
+
+    _signature: ModelSignature
+    _input_example: Any
     
-    def __init__(self, 
-                 neural_net: NeuralNetworkModule, 
-                 target_names: list[str],
-                 input_schema: Schema,
-                 output_schema: Schema,
-                 input_example: Any):
-        """
-        Initialize BaseModel.
-        
-        Args:
-            neural_net: Neural network module
-            target_names: Names of the target labels
-            input_schema: MLflow schema for input
-            output_schema: MLflow schema for output
-            input_example: Example input for MLflow model signature
-        """
+    def __init__(self, model_cfg: DictConfig | None = None):
         super().__init__()
-        self.neural_net = neural_net
-        self.target_names = target_names
-        self._input_schema = input_schema
-        self._output_schema = output_schema
-        self._input_example = input_example
-    
-    def step(self, batch: dict) -> dict:
-        """
-        Perform a single forward pass on a batch and return the loss.
-        """
-        x = batch["inputs"]
-        y = batch["target"]
-        logits = self.neural_net.forward(x)
-        loss = self.neural_net.compute_loss(logits, y)
-        
-        return {
-            "logits": logits,
-            "loss": loss,
-        }
+
+        if model_cfg is not None:
+            self.init_from_config(model_cfg)
     
     @abstractmethod
     def predict(self, context, model_input, params=None):
         """
         MLflow predict method to be implemented by subclasses
         """
-        pass
-    
+
     @abstractmethod
+    def init_from_config(self, cfg: DictConfig):
+        """
+        Initialize the model.
+        """
+
+    def load_checkpoint(self, checkpoint_path: str):
+        """
+        Load the model checkpoint.
+        """
+        checkpoint_data = torch.load(checkpoint_path, map_location="cpu")
+        self.neural_net.load_state_dict(checkpoint_data)
+        self.neural_net.eval()
+    
     def load_context(self, context):
         """
-        MLflow load_context method to be implemented by subclasses
+        Called by MLflow to load the model context.
         """
-        pass
+        cfg_path = context.artifacts.get("model_config")
+        cfg = OmegaConf.load(cfg_path)
+        self.init_from_config(cfg) # type: ignore
+
+        checkpoint_path = context.artifacts.get("model_checkpoint")
+        self.load_checkpoint(checkpoint_path)

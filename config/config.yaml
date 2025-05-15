@@ -5,8 +5,6 @@ defaults:
   - override hydra/job_logging: disabled
   - _self_
 
-dataset: 
-
 hydra:
   run:
     dir: .
@@ -44,11 +42,11 @@ tester:
 
 
 mode: null # mode is set via CLI override (train or test)
-checkpoint: null # {run_id}/{checkpoint_filename}
+checkpoint: null # {run_id}/{checkpoint_tag} e.g. 30925325/best
 device: cuda:0
 runs_path: ./runs
 experiment_name: fcg-detection
-run_name: ${mode}_${model.name}_${dataset.name}_${now:%Y-%m-%d_%H-%M-%S} # a run is  "mode-model-dataset-time"
+run_name: ${mode}_${model.name}_${dataset}_${now:%Y-%m-%d_%H-%M-%S} # a run is  "mode-model-dataset-time"
 
 # only applied to spectrum
 # these are fixed for the most part

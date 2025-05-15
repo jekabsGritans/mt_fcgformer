@@ -1,9 +1,12 @@
 # Metadata
 name: ircnn
 
-# __init__ kwargs and class
+# Class to construct
 init:
   _target_: models.ircnn.IrCNN
+
+# Model hyperparameters
+config:
   input_dim: 1024
   output_dim: 17
   kernel_size: 11

@@ -1,22 +1,10 @@
-"""
-Deploy a trained model from a checkpoint to the MLflow Model Registry.
-
-This module:
-1. Uses the specified checkpoint from an MLflow run
-2. Extracts only the model weights (no optimizer state)
-3. Registers the model to MLflow Model Registry for deployment
-
-This is designed to be called from main.py with mode="deploy"
-"""
-
 import mlflow
-import omegaconf
-import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from utils.misc import is_folder_filename_path
-from utils.mlflow_utils import download_artifact, upload_artifact
+from utils.mlflow_utils import (download_artifact,
+                                get_experiment_name_from_run, upload_artifact)
 
 
 def deploy_model_from_config(cfg: DictConfig):
@@ -34,60 +22,37 @@ def deploy_model_from_config(cfg: DictConfig):
     assert is_folder_filename_path(cfg.checkpoint), "Checkpoint must be in format 'run_id/filename.pt'"
     
     # Parse run_id and filename from checkpoint
-    run_id, filename = cfg.checkpoint.split("/", 1)
+    run_id, checkpoint_tag = cfg.checkpoint.split("/", 1)
 
-    # Download the config file from the training run
-    print(f"Downloading config from run {run_id}...")
-    config_path = download_artifact(run_id, "config.yaml")
+    # Download the config file from the training run to retrieve model architecture
+    config_path = download_artifact(cfg, run_id, "config.yaml")
     train_cfg = OmegaConf.load(config_path)
 
-    # Determine model name
-    model_name = f"{train_cfg.model.name}_{train_cfg.dataset.name}"
+    dataset_id = train_cfg.dataset
+    dataset_name = get_experiment_name_from_run(dataset_id)
 
-    # Rename the run to reflect trained model name
+    # Model is determined by combination of model name and dataset 
+    model_name = f"{train_cfg.model.name}_{dataset_name}"
     mlflow.set_tag("mlflow.runName", f"deploy_{model_name}_{run_id}")
-   
-    # Download the checkpoint
-    print(f"Downloading checkpoint {filename} from run {run_id}...")
-    checkpoint_path = download_artifact(run_id, filename)
-    
-    # Load checkpoint data
-    print(f"Loading checkpoint from {checkpoint_path}...")
-    checkpoint_data = torch.load(checkpoint_path, map_location="cpu")
 
-    # Instantiate model with correct architecture from config
-    print("Instantiating model...")
-    model = instantiate(train_cfg.model.init, pos_weights=None)
-    
-    # Load only the model weights
-    model.load_state_dict(checkpoint_data["model_state_dict"])
-    model.eval()
-    
-    # Log the model to the MLflow Model Registry
-    print("Logging model to MLflow Model Registry...")
-    model_info = mlflow.pytorch.log_model(
-        model, 
-        "model",
-        registered_model_name=model_name
+    # Artifacts needed to load the model
+    checkpoint_uri = f"runs:/{run_id}/{checkpoint_tag}_model.pt"
+    config_uri = f"runs:/{run_id}/config.yaml"
+
+    # Retrieve model class
+    model = instantiate(train_cfg.model.init)
+
+    model_info = mlflow.pyfunc.log_model(
+        artifact_path="model",
+        python_model=model,
+        artifacts={"model_config": config_uri, "model_checkpoint": checkpoint_uri},
+        code_path=..., # TODO: pass code and dependencies such that loadable via raw MLflow
+        signature=model._signature,
+        input_example=model._input_example,
+        registered_model_name=model_name,
+        metadata={
+            "checkpoint": cfg.checkpoin,
+        }
     )
     
-    # Get latest version without using stages
-    client = mlflow.tracking.MlflowClient()
-    model_versions = client.search_model_versions(f"name='{model_name}'")
-    if model_versions:
-        # Get the highest version number
-        latest_version = max([int(mv.version) for mv in model_versions])
-        
-        # Update description
-        client.update_model_version(
-            name=model_name,
-            version=str(latest_version),
-            description=f"Deployed from checkpoint {cfg.checkpoint}"
-        )
-        
-        print(f"Model {model_name} version {latest_version} successfully registered!")
-    else:
-        print(f"Model {model_name} successfully registered!")
-    
     print(f"Model URI: {model_info.model_uri}")
-    return model_info

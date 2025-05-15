@@ -4,6 +4,7 @@ import os
 import urllib.parse
 
 import mlflow
+from mlflow.tracking import MlflowClient
 from omegaconf import DictConfig, OmegaConf
 
 
@@ -54,6 +55,15 @@ def get_run_id() -> str:
     if run is None:
         raise RuntimeError("No active MLflow run found. Please start a run first.")
     return run.info.run_id
+
+def get_experiment_name_from_run(run_id: str) -> str:
+    client = MlflowClient()
+    run = client.get_run(run_id)
+    experiment_id = run.info.experiment_id
+    experiment = client.get_experiment(experiment_id)
+    return experiment.name
+
+
 
 def configure_mlflow_auth():
     """

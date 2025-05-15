@@ -10,8 +10,11 @@ from typing import Any, TypedDict
 import numpy as np
 import torch
 import torch.nn as nn
-from mlflow.types import ColSpec, DataType, Schema, TensorSpec
+from mlflow.models import ModelSignature
+from mlflow.types import (ColSpec, DataType, ParamSchema, ParamSpec, Schema,
+                          TensorSpec)
 from mlflow.types.schema import Array
+from omegaconf import DictConfig
 
 from models.base_model import BaseModel, NeuralNetworkModule
 
@@ -94,27 +97,20 @@ class IrCNNModule(NeuralNetworkModule):
 
 
 class IrCNN(BaseModel):
-    
-    def __init__(self, input_dim: int, output_dim: int, target_names: list[str], pos_weights: list[float] | None, kernel_size: int, dropout_p: float):
-        """
-        Initialize IrCNN model.
-        
-        Args:
-            input_dim: Input dimension (number of features)
-            output_dim: Output dimension (number of classes)
-            target_names: Names of the target labels
-            pos_weights: Positive weights for BCE loss
-            kernel_size: Kernel size for the convolutional layers (hyperparameter)
-            dropout_p: Dropout probability (hyperparameter)
-        """
-        # Create neural network module
-        neural_net = IrCNNModule(input_dim, output_dim, pos_weights, kernel_size, dropout_p)
+
+    def init_from_config(self, cfg: DictConfig):
+
+        # TODO: target names and pos weights are null by default in config, in which case computed from dataset
+
+        # Initialize the network
+        self.neural_net = IrCNNModule(cfg.input_dim, cfg.output_dim, cfg.kernel_size, cfg.dropout_p, cfg.pos_weights)
+        self.target_names = cfg.target_names
         
         # Define MLflow schemas
         input_schema = Schema([
             TensorSpec(
                 type=np.dtype(np.float32),
-                shape=(input_dim,),
+                shape=(cfg.input_dim,),
                 name="spectrum"
             ),
             ColSpec(
@@ -134,16 +130,32 @@ class IrCNN(BaseModel):
             ),
         ])
 
+        param_schema = ParamSchema([
+            ParamSpec(
+                name="threshold",
+                dtype=DataType.double,
+                default=0.5,
+                shape=(-1,)
+
+            )
+        ])
+
         input_example = (
             [
                 {
-                    "spectrum": np.zeros(input_dim, dtype=np.float32)
+                    "spectrum": np.zeros(cfg.input_dim, dtype=np.float32)
                 }
             ],
             {"threshold": 0.5}
         )
-        
-        super().__init__(neural_net, target_names, input_schema, output_schema, input_example)
+
+        self._signature = ModelSignature(
+            inputs=input_schema,
+            outputs=output_schema,
+            params=param_schema
+        )
+
+        self._input_example = input_example
 
     # MLFlow
     def predict(self, context, model_input: list[InputRow], params: dict[str, Any] | None = None):

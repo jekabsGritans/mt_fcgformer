@@ -7,6 +7,7 @@ from datasets import MLFlowDataset
 from deploy import deploy_model_from_config
 from eval import Tester
 from train import Trainer
+from utils.misc import is_folder_filename_path
 from utils.mlflow_utils import configure_mlflow_auth, start_run
 
 
@@ -26,21 +27,23 @@ def main(cfg: DictConfig):
 
 
     # init model
-    model = instantiate(cfg.model.init)
+    model_cfg = cfg.model.config
+    model = instantiate(cfg.model.init, model_cfg=model_cfg)
+    nn = model.nn
 
     if cfg.mode == "train":
         train_dataset = MLFlowDataset(dataset_id=cfg.dataest, split="train", transform=train_transforms)
         val_dataset = MLFlowDataset(dataset_id=cfg.dataset, split="val", transform=eval_transforms)
 
         # pos weights only relevant for training
-        model.neural_net.set_pos_weights(train_dataset.pos_weights)
+        nn.set_pos_weights(train_dataset.pos_weights)
 
-        trainer = Trainer(model=model, train_dataset=train_dataset, val_dataset=val_dataset, cfg=cfg)
+        trainer = Trainer(nn=nn, train_dataset=train_dataset, val_dataset=val_dataset, cfg=cfg)
         trainer.train()
 
     elif cfg.mode == "test":
         test_dataset = MLFlowDataset(dataset_id=cfg.dataset, split="test", transform=eval_transforms)
-        tester = Tester(model=model, test_dataset=test_dataset, cfg=cfg)
+        tester = Tester(nn=nn, test_dataset=test_dataset, cfg=cfg)
         tester.test()
 
     elif cfg.mode == "deploy":

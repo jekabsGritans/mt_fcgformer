@@ -1,4 +1,3 @@
-import mlflow
 import torch
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
@@ -7,8 +6,8 @@ from tqdm import tqdm
 from datasets import MLFlowDataset
 from eval.metrics import (compute_exact_match_ratio, compute_overall_accuracy,
                           compute_per_class_accuracy)
-from models import BaseModel
-from utils.misc import dict_to_device
+from models import NeuralNetworkModule
+from utils.misc import dict_to_device, is_folder_filename_path
 from utils.mlflow_utils import download_artifact
 
 
@@ -16,9 +15,8 @@ class Tester:
     """
     This evaluates the model on the test dataset.
     """
-    def __init__(self, model: BaseModel, test_dataset: MLFlowDataset, cfg: DictConfig):
-        self.model = model
-        self.model.neural_net = self.model.neural_net.to(cfg.device)
+    def __init__(self, nn: NeuralNetworkModule, test_dataset: MLFlowDataset, cfg: DictConfig):
+        self.nn = nn.to(cfg.device)
         self.dataset = test_dataset.to(cfg.device)
 
         self.data_loader = DataLoader(
@@ -29,24 +27,19 @@ class Tester:
 
         self.cfg = cfg
 
-    def load_checkpoint(self, checkpoint_path: str):
+    def load_checkpoint(self, model_path: str):
         """
         Load model state from checkpoint.
-        Args:
-            checkpoint_path (str): Local path to the checkpoint file.
         """
-        checkpoint = torch.load(checkpoint_path)
-        self.model.neural_net.load_state_dict(checkpoint["model_state_dict"])
+
+        self.nn.load_state_dict(torch.load(model_path))
     
-    def download_checkpoint(self, run_id: str, filename: str):
+    def download_checkpoint(self, run_id: str, tag: str):
         """
         Download (and load) the checkpoint file from MLFlow.
-        Args:
-            run_id (str): MLFlow run ID.
-            filename (str): Name of the checkpoint file (e.g. "latest_model.pt")
         """
-        local_path = download_artifact(cfg=self.cfg, run_id=run_id, filename=filename)
-        self.load_checkpoint(local_path)
+        model_path = download_artifact(self.cfg, run_id, f"{tag}_model.pt")
+        self.load_checkpoint(model_path)
 
     def test(self):
         """
@@ -54,17 +47,20 @@ class Tester:
         Log results to MLFlow.
         """
 
-        assert self.dataset.target is not None, "Test dataset must have targets for evaluation."
+        if self.cfg.checkpoint is not None:
+            assert is_folder_filename_path(self.cfg.checkpoint), "Checkpoint path should be of form {run_id}/{tag}"
+            run_id, tag = self.cfg.checkpoint.split("/")
+            self.download_checkpoint(run_id, tag)
 
         predictions = torch.zeros_like(self.dataset.target, device=self.cfg.device) # (num_samples, num_classes) 0/1 for each class
 
-        self.model.neural_net.eval()
+        self.nn.eval()
 
         with torch.no_grad():
             start_idx = 0
             for batch in tqdm(self.data_loader, desc="Testing", unit="batch"):
                 batch = dict_to_device(batch, self.cfg.device)
-                step_out = self.model.step(batch)
+                step_out = self.nn.step(batch)
                 logits = step_out["logits"] 
 
                 preds = torch.sigmoid(logits)

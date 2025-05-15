@@ -1,5 +1,4 @@
 import os
-import time
 
 import mlflow
 import torch
@@ -10,16 +9,15 @@ from tqdm import tqdm
 from datasets import MLFlowDataset
 from eval.metrics import (compute_exact_match_ratio, compute_overall_accuracy,
                           compute_per_class_accuracy)
-from models import BaseModel
+from models import NeuralNetworkModule
 from utils.misc import dict_to_device, is_folder_filename_path
 from utils.mlflow_utils import (download_artifact, get_run_id,
                                 upload_sync_artifacts)
 
 
 class Trainer:
-    def __init__(self, model: BaseModel, train_dataset: MLFlowDataset, val_dataset: MLFlowDataset, cfg: DictConfig):
-        self.model = model
-        self.model.neural_net = self.model.neural_net.to(cfg.device)
+    def __init__(self, nn: NeuralNetworkModule, train_dataset: MLFlowDataset, val_dataset: MLFlowDataset, cfg: DictConfig):
+        self.nn = nn.to(cfg.device)
         self.train_dataset = train_dataset.to(cfg.device)
         self.val_dataset = val_dataset.to(cfg.device)
 
@@ -38,7 +36,7 @@ class Trainer:
             )
          
         self.optimizer = torch.optim.Adam(
-            self.model.neural_net.parameters(), lr=cfg.trainer.lr
+            self.nn.parameters(), lr=cfg.trainer.lr
         )
 
         self.best_val_loss = float('inf')
@@ -50,7 +48,7 @@ class Trainer:
         Load model and optimizer states from checkpoint.
         """
 
-        self.model.neural_net.load_state_dict(torch.load(model_path))
+        self.nn.load_state_dict(torch.load(model_path))
         self.optimizer.load_state_dict(torch.load(optim_path))
     
     def download_checkpoint(self, run_id: str, tag: str):
@@ -71,7 +69,7 @@ class Trainer:
         run_id = get_run_id()
 
         local_model_path = os.path.join(self.cfg.runs_path, run_id, f"{tag}_model.pt")
-        torch.save(self.model.neural_net.state_dict(), local_model_path)
+        torch.save(self.nn.state_dict(), local_model_path)
 
         local_optim_path = os.path.join(self.cfg.runs_path, run_id, f"{tag}_optim.pt")
         torch.save(self.optimizer.state_dict(), local_optim_path)
@@ -85,7 +83,7 @@ class Trainer:
         assert self.val_dataset.target is not None, "Validation dataset must have targets for evaluation."
         predictions = torch.zeros_like(self.val_dataset.target, device=self.cfg.device) # (num_samples, num_classes) 0/1 for each class
 
-        self.model.neural_net.eval()
+        self.nn.eval()
 
         val_loss = 0.0
         samples_seen = 0
@@ -94,7 +92,7 @@ class Trainer:
             start_idx = 0
             for batch in tqdm(self.val_loader, desc="Testing", unit="batch"):
                 batch = dict_to_device(batch, self.cfg.device)
-                step_out = self.model.step(batch)
+                step_out = self.nn.step(batch)
                 logits = step_out["logits"] 
                 loss = step_out["loss"]
 
@@ -135,21 +133,21 @@ class Trainer:
 
     def train(self):
         if self.cfg.checkpoint is not None:
-            assert is_folder_filename_path(self.cfg.checkpoint), "Checkpoint path should be of form {run_id}/{filename}"
-            run_id, filename = self.cfg.checkpoint.split("/")
-            self.download_checkpoint(run_id, filename)
+            assert is_folder_filename_path(self.cfg.checkpoint), "Checkpoint path should be of form {run_id}/{tag}"
+            run_id, tag = self.cfg.checkpoint.split("/")
+            self.download_checkpoint(run_id, tag)
 
         self.best_val_loss = float("inf")
         total_steps = 0 # global step counter
 
         try:
             for epoch in range(self.cfg.trainer.epochs):
-                self.model.neural_net.train()
+                self.nn.train()
 
                 for batch_idx, batch in enumerate(tqdm(self.train_loader, desc=f"Epoch [{epoch+1}/{self.cfg.trainer.epochs}]")):
                     batch = dict_to_device(batch, self.cfg.device)
 
-                    step_out = self.model.step(batch)
+                    step_out = self.nn.step(batch)
                     loss = step_out["loss"]
 
                     self.optimizer.zero_grad()

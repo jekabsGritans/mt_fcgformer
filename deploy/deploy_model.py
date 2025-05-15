@@ -45,8 +45,8 @@ def deploy_model_from_config(cfg: DictConfig):
     model_info = mlflow.pyfunc.log_model(
         artifact_path="model",
         python_model=model,
-        artifacts={"model_config": config_uri, "model_checkpoint": checkpoint_uri},
-        code_paths=["models"],
+        artifacts={"config": config_uri, "model_checkpoint": checkpoint_uri},
+        code_paths=["models", "utils"],
         signature=model._signature,
         input_example=model._input_example,
         registered_model_name=model_name,

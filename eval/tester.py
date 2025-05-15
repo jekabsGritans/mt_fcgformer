@@ -8,7 +8,7 @@ from eval.metrics import (compute_exact_match_ratio, compute_overall_accuracy,
                           compute_per_class_accuracy)
 from models import NeuralNetworkModule
 from utils.misc import dict_to_device, is_folder_filename_path
-from utils.mlflow_utils import download_artifact
+from utils.mlflow_utils import download_artifact, log_config
 
 
 class Tester:
@@ -46,6 +46,8 @@ class Tester:
         Evaluate the model on the test dataset.
         Log results to MLFlow.
         """
+
+        log_config(self.cfg)
 
         if self.cfg.checkpoint is not None:
             assert is_folder_filename_path(self.cfg.checkpoint), "Checkpoint path should be of form {run_id}/{tag}"

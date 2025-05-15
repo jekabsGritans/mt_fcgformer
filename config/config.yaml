@@ -43,12 +43,13 @@ tester:
 
 mode: null # mode is set via CLI override (train or test)
 checkpoint: null # {run_id}/{checkpoint_tag} e.g. 30925325/best
+
 device: cuda:0
 runs_path: ./runs
 experiment_name: fcg-detection
 run_name: ${mode}_${model.name}_${dataset}_${now:%Y-%m-%d_%H-%M-%S} # a run is  "mode-model-dataset-time"
 
-# only applied to spectrum
+# only applied to spectrum. tabular inputs aren't transformed. both transformed spectrum and tabular inputs are tokenized in transformer.
 # these are fixed for the most part
 # kwargs for auto-instantiation of sequential transformations
 eval_transforms:
@@ -84,3 +85,6 @@ train_transforms:
 
     - _target_: utils.transforms.Resizer
       signal_size: 1024
+
+# these are autofilled
+target_names: null

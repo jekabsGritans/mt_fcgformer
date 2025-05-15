@@ -5,9 +5,8 @@ name: ircnn
 init:
   _target_: models.ircnn.IrCNN
 
-# Model hyperparameters
-config:
-  input_dim: 1024
-  output_dim: 17
-  kernel_size: 11
-  dropout_p: 0.48599073736368
+# hyperparameters
+input_dim: 1024
+output_dim: 17
+kernel_size: 11
+dropout_p: 0.48599073736368

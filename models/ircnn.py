@@ -11,8 +11,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from mlflow.models import ModelSignature
-from mlflow.types import (ColSpec, DataType, ParamSchema, ParamSpec, Schema,
-                          TensorSpec)
+from mlflow.types import ColSpec, DataType, ParamSchema, ParamSpec, Schema
 from mlflow.types.schema import Array
 from omegaconf import DictConfig
 
@@ -103,29 +102,22 @@ class IrCNN(BaseModel):
         # TODO: target names and pos weights are null by default in config, in which case computed from dataset
 
         # Initialize the network
-        self.neural_net = IrCNNModule(cfg.input_dim, cfg.output_dim, cfg.kernel_size, cfg.dropout_p, cfg.pos_weights)
+        self.nn = IrCNNModule(cfg.model.input_dim, cfg.model.output_dim, cfg.model.kernel_size, cfg.model.dropout_p)
         self.target_names = cfg.target_names
         
         # Define MLflow schemas
         input_schema = Schema([
-            TensorSpec(
-                type=np.dtype(np.float32),
-                shape=(cfg.input_dim,),
-                name="spectrum"
-            ),
-            ColSpec(
-                type=DataType.double,
-                name="threshold"
-            )
-        ])
+            ColSpec(type=Array(DataType.double), name="spectrum"),
+            ColSpec(type=DataType.double, name="threshold")
+        ]) 
 
         output_schema = Schema([
             ColSpec(
-                type=Array("string"),
+                type=Array(DataType.string),
                 name="positive_targets",
             ),
             ColSpec(
-                type=Array("double"),
+                type=Array(DataType.double),
                 name="positive_probabilities"
             ),
         ])
@@ -134,9 +126,7 @@ class IrCNN(BaseModel):
             ParamSpec(
                 name="threshold",
                 dtype=DataType.double,
-                default=0.5,
-                shape=(-1,)
-
+                default=0.5
             )
         ])
 
@@ -170,13 +160,22 @@ class IrCNN(BaseModel):
         Returns:
             List of predictions
         """
+        assert self.target_names is not None, "Target names not set."
+
         threshold = params.get("threshold", 0.5) if params else 0.5
         results = []
         
         for row in model_input:
             spectrum = torch.tensor(row["spectrum"], dtype=torch.float32)
+
+            # preprocess like in evaluation
+            spectrum = self.spectrum_eval_transform(spectrum)
+
+            # add batch dim
             spectrum = spectrum.unsqueeze(0)
-            logits = self.neural_net.forward(spectrum)
+
+            # forward pass
+            logits = self.nn.forward(spectrum)
             probabilities = torch.sigmoid(logits).squeeze(0).tolist()
 
             out_probs, out_targets = [], []
@@ -201,5 +200,5 @@ class IrCNN(BaseModel):
         """
         checkpoint_path = context.artifacts["checkpoint"]
         state_dict = torch.load(checkpoint_path, map_location="cpu")
-        self.neural_net.load_state_dict(state_dict)
-        self.neural_net.eval()
+        self.nn.load_state_dict(state_dict)
+        self.nn.eval()

@@ -90,39 +90,24 @@ def configure_mlflow_auth():
     # Set the tracking URI for MLflow
     mlflow.set_tracking_uri(tracking_uri)
     
-def start_run(cfg: DictConfig, log_config: bool = True) -> None:
+def log_config(cfg: DictConfig) -> None:
     """
-    Setup MLflow tracking for experiment.
-    1. Connect to MLflow server
-    2. Create experiment (or get existing one)
-    3. Start a run
-    4. Log config for reproducibility
+    Log the configuration to MLflow as a YAML artifact.
+    This is useful for tracking the configuration used for each run.
+    
+    Args:
+        cfg (DictConfig): Configuration object from Hydra
     """
+    run_id = get_run_id()
+    run_path = os.path.join(cfg.runs_path, run_id)
+    os.makedirs(run_path, exist_ok=True)
 
-    # Create experiment (or get existing one) 
-    mlflow.set_experiment(cfg.experiment_name)
+    config_path = os.path.join(run_path, "config.yaml")
 
-    # Start a run
-    mlflow.start_run(run_name=cfg.run_name)
+    with open(config_path, "w") as f:
+        OmegaConf.save(config=cfg, f=f)
 
-    # Log config
-    if log_config:
-
-        ## as parameters
-        flat_config = OmegaConf.to_container(cfg, resolve=True)
-        mlflow.log_params(_flatten_dict(flat_config))
-
-        ## as YAML artifact for reproducibility
-        run_id = get_run_id()
-        run_path = os.path.join(cfg.runs_path, run_id)
-        os.makedirs(run_path, exist_ok=True)
-
-        config_path = os.path.join(run_path, "config.yaml")
-
-        with open(config_path, "w") as f:
-            OmegaConf.save(config=cfg, f=f)
-
-        upload_artifact(config_path) # saves to runs:/{current_run_id}/config.yaml
+    upload_artifact(config_path) # saves to runs:/{current_run_id}/config.yaml
 
 def download_artifact(cfg: DictConfig, run_id: str, filename: str) -> str:
     """
@@ -139,7 +124,7 @@ def download_artifact(cfg: DictConfig, run_id: str, filename: str) -> str:
     os.makedirs(dst_dir, exist_ok=True)
 
     try:
-        mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=filename, dst_path=dst_dir)
+        mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=filename, dst_path=dst_dir) # type: ignore
     except Exception as e:
         raise RuntimeError(f"Failed to download artifact {filename} from run {run_id}: {e}")
 

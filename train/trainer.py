@@ -11,7 +11,7 @@ from eval.metrics import (compute_exact_match_ratio, compute_overall_accuracy,
                           compute_per_class_accuracy)
 from models import NeuralNetworkModule
 from utils.misc import dict_to_device, is_folder_filename_path
-from utils.mlflow_utils import (download_artifact, get_run_id,
+from utils.mlflow_utils import (download_artifact, get_run_id, log_config,
                                 upload_sync_artifacts)
 
 
@@ -20,6 +20,10 @@ class Trainer:
         self.nn = nn.to(cfg.device)
         self.train_dataset = train_dataset.to(cfg.device)
         self.val_dataset = val_dataset.to(cfg.device)
+
+        # update target names if not set in cfg
+        if cfg.target_names is None:
+            cfg.target_names = self.train_dataset.target_names
 
         self.train_loader = DataLoader(
             self.train_dataset,
@@ -132,6 +136,9 @@ class Trainer:
         return val_loss, overall_acc
 
     def train(self):
+
+        log_config(self.cfg)
+
         if self.cfg.checkpoint is not None:
             assert is_folder_filename_path(self.cfg.checkpoint), "Checkpoint path should be of form {run_id}/{tag}"
             run_id, tag = self.cfg.checkpoint.split("/")

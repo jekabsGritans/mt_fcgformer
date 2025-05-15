@@ -7,6 +7,8 @@ from mlflow.models import ModelSignature
 from mlflow.pyfunc import PythonModel  # type: ignore
 from omegaconf import DictConfig, OmegaConf
 
+from utils.transforms import Compose, Transform
+
 
 # Define neural network module for the model architecture
 class NeuralNetworkModule(nn.Module, ABC):
@@ -64,12 +66,15 @@ class BaseModel(PythonModel, ABC):
 
     _signature: ModelSignature
     _input_example: Any
+
+    spectrum_eval_transform: Transform
     
-    def __init__(self, model_cfg: DictConfig | None = None):
+    def __init__(self, cfg: DictConfig | None = None):
         super().__init__()
 
-        if model_cfg is not None:
-            self.init_from_config(model_cfg)
+        if cfg is not None:
+            self.init_from_config(cfg)
+        
     
     @abstractmethod
     def predict(self, context, model_input, params=None):
@@ -83,6 +88,12 @@ class BaseModel(PythonModel, ABC):
         Initialize the model.
         """
 
+    def set_target_names(self, target_names: list[str]):
+        """
+        Set the target names for the model.
+        """
+        self.target_names = target_names
+
     def load_checkpoint(self, checkpoint_path: str):
         """
         Load the model checkpoint.
@@ -95,9 +106,16 @@ class BaseModel(PythonModel, ABC):
         """
         Called by MLflow to load the model context.
         """
-        cfg_path = context.artifacts.get("model_config")
+
+        # Load config and initialize
+        cfg_path = context.artifacts.get("config")
         cfg = OmegaConf.load(cfg_path)
         self.init_from_config(cfg) # type: ignore
 
+        # Load eval transforms
+        self.spectrum_eval_transform = Compose.from_hydra(cfg.eval_transforms)
+
+        # Load checkpoint
         checkpoint_path = context.artifacts.get("model_checkpoint")
         self.load_checkpoint(checkpoint_path)
+

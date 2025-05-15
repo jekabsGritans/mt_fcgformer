@@ -37,7 +37,7 @@
             "args": [
                 "mode=test",
                 "device=cpu",
-                "checkpoint=55616055fd524588aa20b7b967969037/best_checkpoint.pt",
+                "checkpoint=55616055fd524588aa20b7b967969037/best",
                 "experiment_name=debug"
             ]
         },
@@ -50,7 +50,7 @@
             "args": [
                 "mode=test",
                 "device=cuda:0",
-                "checkpoint=55616055fd524588aa20b7b967969037/best_checkpoint.pt",
+                "checkpoint=55616055fd524588aa20b7b967969037/bes",
                 "experiment_name=debug"
             ]
         },

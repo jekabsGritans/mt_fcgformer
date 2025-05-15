@@ -133,7 +133,7 @@ class IrCNN(BaseModel):
         input_example = (
             [
                 {
-                    "spectrum": np.zeros(cfg.input_dim, dtype=np.float32)
+                    "spectrum": np.zeros(cfg.model.input_dim, dtype=np.float32)
                 }
             ],
             {"threshold": 0.5}

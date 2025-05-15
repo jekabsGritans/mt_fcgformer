@@ -3,13 +3,24 @@
 Finish this today/tmrw
 -----------------------------------------------------
 - [ ] finish model deployment
-    - [ ] pass dependencies and transforms to log_model
+    - [ ] implement pos weights computation
+    - [ ] debug all 3 modes of running
     - [ ] test deployment and loading outside of this repo
 
+- [ ] cache artifacts locally
+    - [ ] datasets just cache
+    - [ ] checkpoints - append epoch number to checkpoint, still delete previous checkpoint. when downloading checkpoint, check if locally cached has same number as latest. Everything else just download.
+
 - [ ] convert dataset to pandas
+    - supported column types: spectra, categorical, boolean, numerical
+    - transform only applied to spectrum pre-tokenization
+    - other are batched as python primitives (or myb ndarray)
+    - cnn ignores rest
+    - transformer does mixed-input tokenization within model
+        - should keep whatever is fixed in gpu memory (is embedding learned?)
+    - need to provide inputs and targets as lists of column names (verify unique)
 
 - [ ] improve training (LR scheduling and good optimizer)
-    - [ ] implement pos weights computation
 
 - [ ] train IRCnn locally
 
@@ -19,14 +30,18 @@ Finish this today/tmrw
 
 - [ ] implement FCGFormer and try to train locally
 
+- [ ] separate prediction heads and try to train locally
+
+- [ ] visualize attention
+
+- [ ] fix some tokens (if doable)
+
+-------------------------------------------------------
+
 - [ ] extra logs (mass edit)
     - [ ] logs instead of prints
     - [ ] saving to file and uploading artifact
     - [ ] resource usage logs
-
-- [ ] separate prediction heads and try to train locally
-
-- [ ] visualize attention
 
 - [ ] cloud deployment scripts + hyperparam search algos
 - [ ] model improvement

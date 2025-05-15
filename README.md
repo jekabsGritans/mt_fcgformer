@@ -2,10 +2,10 @@
 
 Finish this today/tmrw
 -----------------------------------------------------
-- [ ] fix deploy_model. model part should be trivial with schemas deifned.
-    - [ ] make eval preprocessing specified in training config a part of deployed model, prolly by saving eval_transforms for .predict
+- [ ] finish model deployment
+    - [ ] pass dependencies and transforms to log_model
+    - [ ] test deployment and loading outside of this repo
 
-- [ ] mlflow load model example
 - [ ] convert dataset to pandas
 
 - [ ] improve training (LR scheduling and good optimizer)

@@ -68,7 +68,28 @@ class MLFlowDataset(Dataset):
 
 
     def _compute_pos_weights(self, pos_counts: list[int]) -> list[float]:
-        raise NotImplementedError()
+        """
+        Compute positive weights for each target class to address class imbalance.
+        
+        The positive weight for each class is calculated as (total_samples - pos_count) / pos_count,
+        which gives higher weights to underrepresented positive examples.
+        
+        Args:
+            pos_counts (list[int]): Number of positive samples for each target class
+            
+        Returns:
+            list[float]: Positive weights for each target class
+        """
+        total_samples = self.inputs.shape[0]
+        pos_weights = []
+        
+        for pos_count, target_name in zip(pos_counts, self.target_names):
+            # Avoid division by zero
+            assert pos_count > 0, f"No positive samples for target {target_name} in the dataset. it probably shouldn't be predicted."
+            weight = (total_samples - pos_count) / pos_count
+            pos_weights.append(weight)
+        
+        return pos_weights
     
 
     def to(self, device: torch.device) -> MLFlowDataset:

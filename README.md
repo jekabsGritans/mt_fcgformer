@@ -3,8 +3,8 @@
 Finish this today/tmrw
 -----------------------------------------------------
 - [ ] finish model deployment
-    - [ ] implement pos weights computation
-    - [ ] debug all 3 modes of running
+    - [x] implement pos weights computation
+    - [x] debug all 3 modes of running
     - [ ] test deployment and loading outside of this repo
 
 - [ ] cache artifacts locally

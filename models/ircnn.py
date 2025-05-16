@@ -8,6 +8,7 @@ Pytorch Reimplementation: https://github.com/lycaoduong/FcgFormer
 from typing import Any, TypedDict
 
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 from mlflow.models import ModelSignature
@@ -20,7 +21,6 @@ from models.base_model import BaseModel, NeuralNetworkModule
 
 class InputRow(TypedDict):
     spectrum: np.ndarray  # (input_dim,)
-    threshold: float
 
 class OutputRow(TypedDict):
     positive_targets: list[str]
@@ -107,14 +107,13 @@ class IrCNN(BaseModel):
         
         # Define MLflow schemas
         input_schema = Schema([
-            ColSpec(type=Array(DataType.double), name="spectrum"),
-            ColSpec(type=DataType.double, name="threshold")
+            ColSpec(type=Array(DataType.double), name="spectrum")
         ]) 
 
         output_schema = Schema([
             ColSpec(
                 type=Array(DataType.string),
-                name="positive_targets",
+                name="positive_targets"
             ),
             ColSpec(
                 type=Array(DataType.double),
@@ -130,14 +129,7 @@ class IrCNN(BaseModel):
             )
         ])
 
-        input_example = (
-            [
-                {
-                    "spectrum": np.zeros(cfg.model.input_dim, dtype=np.float32)
-                }
-            ],
-            {"threshold": 0.5}
-        )
+        input_example = pd.DataFrame({"spectrum": [np.zeros(cfg.model.input_dim, dtype=np.float32).tolist()]})
 
         self._signature = ModelSignature(
             inputs=input_schema,
@@ -190,15 +182,3 @@ class IrCNN(BaseModel):
             })
         
         return results
-        
-    def load_context(self, context):
-        """
-        Load model weights from MLflow artifacts.
-        
-        Args:
-            context: MLflow context
-        """
-        checkpoint_path = context.artifacts["checkpoint"]
-        state_dict = torch.load(checkpoint_path, map_location="cpu")
-        self.nn.load_state_dict(state_dict)
-        self.nn.eval()

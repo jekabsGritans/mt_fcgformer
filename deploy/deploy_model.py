@@ -40,7 +40,7 @@ def deploy_model_from_config(cfg: DictConfig):
     config_uri = f"runs:/{run_id}/config.yaml"
 
     # Retrieve model class
-    model = instantiate(train_cfg.model.init)
+    model = instantiate(train_cfg.model.init, cfg=train_cfg)
 
     model_info = mlflow.pyfunc.log_model(
         artifact_path="model",

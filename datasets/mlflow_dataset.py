@@ -3,11 +3,12 @@ from __future__ import annotations
 import os
 from typing import Callable
 
-import mlflow
-import mlflow.artifacts
 import numpy as np
 import torch
+from omegaconf import DictConfig
 from torch.utils.data import Dataset
+
+from utils.mlflow_utils import download_artifact
 
 # our transforms are just user defined functions
 Transform = Callable[[torch.Tensor], torch.Tensor]
@@ -24,22 +25,31 @@ class MLFlowDataset(Dataset):
     target_names: list[str]
     pos_weights: torch.Tensor # (num_targets,)
 
-    def __init__(self, dataset_id: str, split: str, transform: Transform | None = None):
+    def __init__(self, cfg: DictConfig, dataset_id: str, split: str, transform: Transform | None = None):
         """
         Initialize the dataset.
         Args:
+            cfg (DictConfig): Configuration object.
             dataset_id (str): MLFlow run ID of the dataset to download.
-            split (str): Split of the dataset to download (train, val, test).
+            split (str): Split of the dataset to download (train, valid, test).
             transform (Transform | None): Transform to apply to the inputs.
         """
         super().__init__()
+        self.cfg = cfg
         self.dataset_id = dataset_id
         self.transform = transform
         self.split = split
         self.download()
 
     def download(self):
-        local_dir = mlflow.artifacts.download_artifacts(run_id=self.dataset_id)
+        artifacts = [f"{self.split}_inputs.npy", f"{self.split}_target.npy", "target_names.txt", f"{self.split}_pos_counts.txt"]
+
+        # download only the artifacts we need
+        for artifact in artifacts:
+            download_artifact(self.cfg, self.dataset_id, artifact)
+
+        local_dir = os.path.join(self.cfg.runs_path, self.dataset_id)
+
         inputs_path = os.path.join(local_dir, f"{self.split}_inputs.npy")
         target_path = os.path.join(local_dir, f"{self.split}_target.npy")
         target_names_path = os.path.join(local_dir, "target_names.txt")

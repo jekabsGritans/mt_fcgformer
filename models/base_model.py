@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any
 
+import mlflow.artifacts
 import torch
 import torch.nn as nn
 from mlflow.models import ModelSignature
@@ -61,7 +62,7 @@ class BaseModel(PythonModel, ABC):
     This class serves as the MLflow PyFuncModel wrapper around a neural network.
     """
 
-    neural_net: NeuralNetworkModule
+    nn: NeuralNetworkModule
     target_names: list[str]
 
     _signature: ModelSignature
@@ -99,8 +100,8 @@ class BaseModel(PythonModel, ABC):
         Load the model checkpoint.
         """
         checkpoint_data = torch.load(checkpoint_path, map_location="cpu")
-        self.neural_net.load_state_dict(checkpoint_data)
-        self.neural_net.eval()
+        self.nn.load_state_dict(checkpoint_data)
+        self.nn.eval()
     
     def load_context(self, context):
         """
@@ -108,7 +109,8 @@ class BaseModel(PythonModel, ABC):
         """
 
         # Load config and initialize
-        cfg_path = context.artifacts.get("config")
+        cfg_uri = context.artifacts.get("config")
+        cfg_path = mlflow.artifacts.download_artifacts(artifact_uri=cfg_uri, dst_path=None)
         cfg = OmegaConf.load(cfg_path)
         self.init_from_config(cfg) # type: ignore
 
@@ -116,6 +118,7 @@ class BaseModel(PythonModel, ABC):
         self.spectrum_eval_transform = Compose.from_hydra(cfg.eval_transforms)
 
         # Load checkpoint
-        checkpoint_path = context.artifacts.get("model_checkpoint")
+        checkpoint_uri = context.artifacts.get("model_checkpoint")
+        checkpoint_path = mlflow.artifacts.download_artifacts(artifact_uri=checkpoint_uri, dst_path=None)
         self.load_checkpoint(checkpoint_path)
 

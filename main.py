@@ -32,8 +32,8 @@ def main(cfg: DictConfig):
 
     with mlflow.start_run(run_name=cfg.run_name) as run:
         if cfg.mode == "train":
-            train_dataset = MLFlowDataset(dataset_id=cfg.dataset, split="train", transform=train_transforms)
-            val_dataset = MLFlowDataset(dataset_id=cfg.dataset, split="val", transform=eval_transforms)
+            train_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset, split="train", transform=train_transforms)
+            val_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset, split="valid", transform=eval_transforms)
 
             # pos weights only relevant for training
             nn.set_pos_weights(train_dataset.pos_weights)
@@ -42,7 +42,7 @@ def main(cfg: DictConfig):
             trainer.train()
 
         elif cfg.mode == "test":
-            test_dataset = MLFlowDataset(dataset_id=cfg.dataset, split="test", transform=eval_transforms)
+            test_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset, split="test", transform=eval_transforms)
             tester = Tester(nn=nn, test_dataset=test_dataset, cfg=cfg)
             tester.test()
 

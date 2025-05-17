@@ -105,7 +105,7 @@ class IrCNN(BaseModel):
         
         # Input is only spectrum.
         input_schema = Schema([
-            TensorSpec(np.dtype(np.float32), shape=(-1, cfg.model.input_dim))
+            TensorSpec(np.dtype(np.float64), shape=(-1, cfg.model.input_dim))
         ])
 
         # Known labels are params
@@ -131,7 +131,7 @@ class IrCNN(BaseModel):
         ])
 
         # Batched input of spectra
-        input_example = np.zeros((1, cfg.model.input_dim), dtype=np.float32)
+        input_example = np.zeros((1, cfg.model.input_dim))
 
         self._signature = ModelSignature(
             inputs=input_schema,
@@ -166,6 +166,7 @@ class IrCNN(BaseModel):
 
         for spectrum in model_input:
             # preprocess like in evaluation
+            spectrum = torch.from_numpy(spectrum).float()
             spectrum = self.spectrum_eval_transform(spectrum)
 
             # add batch dim

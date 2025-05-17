@@ -2,18 +2,6 @@
 
 Finish this today/tmrw
 -----------------------------------------------------
-- [ ] finish model deployment
-    - [x] implement pos weights computation
-    - [x] debug all 3 modes of running
-    - [ ] why input example not displaying in webui?
-        - if hard to fix, autogenerate the description
-    - [ ] why double artifact downloads in deploy script?
-    - [ ] print better url for deploy script
-    - [ ] test deployment and loading outside of this repo
-
-- [ ] cache artifacts locally
-    - [ ] datasets just cache
-    - [ ] checkpoints - append epoch number to checkpoint, still delete previous checkpoint. when downloading checkpoint, check if locally cached has same number as latest. Everything else just download.
 
 - [ ] convert dataset to pandas
     - supported column types: spectra, categorical, boolean, numerical

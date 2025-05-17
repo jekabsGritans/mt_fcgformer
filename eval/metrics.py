@@ -4,53 +4,50 @@ Utility functions to compute different metrics and visualizations for validation
 import torch
 
 
-def compute_overall_accuracy(preds: torch.Tensor, targets: torch.Tensor) -> float:
-    """
-    Compute overall accuracy of the model predictions.
-    
-    Args:
-        preds (torch.Tensor): (num_samples, num_classes) predictions (0/1 for each class).
-        targets (torch.Tensor): (num_samples, num_classes) ground truth labels (0/1 for each class).
-    """
+def compute_metrics(preds: torch.Tensor, targets: torch.Tensor) -> dict:
 
-    assert preds.shape == targets.shape, "Predictions and targets must have the same shape."
-    
-    # Compute overall accuracy
-    correct = (preds == targets).float().sum()
-    total = targets.numel()
-    accuracy = correct / total
-    
-    return accuracy.item()
+    # per-target confusion
+    tp = torch.logical_and(preds, targets).sum(dim=0)
+    tn = torch.logical_and(torch.logical_not(preds), torch.logical_not(targets)).sum(dim=0)
+    fp = torch.logical_and(preds, torch.logical_not(targets)).sum(dim=0)
+    fn = torch.logical_and(torch.logical_not(preds), targets).sum(dim=0)
 
-def compute_per_class_accuracy(preds: torch.Tensor, targets: torch.Tensor) -> dict[int, float]:
-    """
-    Compute per-class accuracy of the model predictions.
-    Args:
-        preds (torch.Tensor): (num_samples, num_classes) predictions (0/1 for each class).
-        targets (torch.Tensor): (num_samples, num_classes) ground truth labels (0/1 for each class).
-    """
-    assert preds.shape == targets.shape, "Predictions and targets must have the same shape."
-    
-    # Compute per-class accuracy
-    per_class_acc = {
-        i: (preds[:, i] == targets[:, i]).float().mean().item()
-        for i in range(preds.shape[1])
+    per_target_acc = (tp + tn) / (tp + tn + fp + fn + 1e-10)
+    per_target_precision = tp / (tp + fp + 1e-10)
+    per_target_recall = tp / (tp + fn + 1e-10)
+    per_target_f1 = 2 * (per_target_precision * per_target_recall) / (per_target_precision + per_target_recall + 1e-10)
+
+    # overall confusion
+    overall_tp = tp.sum()
+    overall_tn = tn.sum()
+    overall_fp = fp.sum()
+    overall_fn = fn.sum()
+
+    overall_acc = (overall_tp + overall_tn) / (overall_tp + overall_tn + overall_fp + overall_fn + 1e-10)
+    overall_precision = overall_tp / (overall_tp + overall_fp + 1e-10)
+    overall_recall = overall_tp / (overall_tp + overall_fn + 1e-10)
+    overall_f1 = 2 * (overall_precision * overall_recall) / (overall_precision + overall_recall + 1e-10)
+
+    exact_match_ratio = torch.all(preds == targets, dim=1).float().mean()
+
+    out_lists = {
+        "per_target_accuracy": per_target_acc,
+        "per_target_precision": per_target_precision,
+        "per_target_recall": per_target_recall,
+        "per_target_f1": per_target_f1,
     }
-    
-    return per_class_acc
 
-def compute_exact_match_ratio(preds: torch.Tensor, targets: torch.Tensor) -> float:
-    """
-    Compute exact match ratio of the model predictions.
-    
-    Args:
-        preds (torch.Tensor): (num_samples, num_classes) predictions (0/1 for each class).
-        targets (torch.Tensor): (num_samples, num_classes) ground truth labels (0/1 for each class).
-    """
-    assert preds.shape == targets.shape, "Predictions and targets must have the same shape."
-    
-    # Compute exact match ratio
-    exact_match = torch.all(preds == targets, dim=1)
-    exact_match_ratio = exact_match.float().mean()
-    
-    return exact_match_ratio.item()
+    out_vals = {
+        "overall_accuracy": overall_acc,
+        "overall_precision": overall_precision,
+        "overall_recall": overall_recall,
+        "overall_f1": overall_f1,
+        "exact_match_ratio": exact_match_ratio
+    }
+
+    out_lists = {k: [round(float(x), 4) for x in v.cpu().numpy()] for k, v in out_lists.items()}   
+    out_vals = {k: round(float(v.cpu().numpy()), 4) for k, v in out_vals.items()}
+
+    out = {**out_lists, **out_vals}
+
+    return out

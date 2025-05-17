@@ -12,18 +12,9 @@ Finish this today/tmrw
         - should keep whatever is fixed in gpu memory (is embedding learned?)
     - need to provide inputs and targets as lists of column names (verify unique)
 
-
-    - mlflow input is always just spectrum. 
-    - params are:
-        - bool for each target. Default = None, so if unspecified treated as unknown
-        - bool for each flag (e.g. specific solvent used). Default = false.
-
-
 - [ ] improve training (LR scheduling and good optimizer)
 
 - [ ] train IRCnn locally
-
-- [ ] improve evaluation, incl neater (in terms of mlflowui) per-class organisation, recall, precission and visualizations (confusion mat)
 
 ------------------------------------------------------
 
@@ -32,6 +23,7 @@ Finish this today/tmrw
 - [ ] separate prediction heads and try to train locally
 
 - [ ] visualize attention
+    - [ ] separate visualisation for spectral regions and flags
 
 - [ ] fix some tokens (if doable)
 
@@ -49,6 +41,8 @@ Finish this today/tmrw
 
 - [ ] mass fix docstrings and write readme
 
+- [ ] performance eval
+    - optimal threshold can be found by maximising f1 in CNN paper
 
 
 ## Datasets

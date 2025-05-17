@@ -33,12 +33,14 @@ trainer:
     num_workers: 0
     persistent_workers: False
     pin_memory: False
+    threshold: 0.5
 
 tester:
   batch_size: 32
   num_workers: 0
   persistent_workers: False
   pin_memory: False
+  threshold: 0.5
 
 
 mode: null # mode is set via CLI override (train or test)

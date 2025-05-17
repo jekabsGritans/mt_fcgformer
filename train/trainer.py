@@ -7,12 +7,11 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from datasets import MLFlowDataset
-from eval.metrics import (compute_exact_match_ratio, compute_overall_accuracy,
-                          compute_per_class_accuracy)
+from eval.metrics import compute_metrics
 from models import NeuralNetworkModule
 from utils.misc import dict_to_device, is_folder_filename_path
 from utils.mlflow_utils import (download_artifact, get_run_id, log_config,
-                                upload_sync_artifacts)
+                                log_config_params, upload_sync_artifacts)
 
 
 class Trainer:
@@ -78,14 +77,14 @@ class Trainer:
         local_optim_path = os.path.join(self.cfg.runs_path, run_id, f"{tag}_optim.pt")
         torch.save(self.optimizer.state_dict(), local_optim_path)
     
-    def validate(self, total_steps: int) -> tuple[float, float]:
+    def validate(self, total_steps: int) -> float:
         """
         Validate the model on the validation dataset.
         :return: Tuple of (average loss, average accuracy)
         """
 
         assert self.val_dataset.target is not None, "Validation dataset must have targets for evaluation."
-        predictions = torch.zeros_like(self.val_dataset.target, device=self.cfg.device) # (num_samples, num_classes) 0/1 for each class
+        predictions = torch.zeros_like(self.val_dataset.target, device=self.cfg.device) # (num_samples, num_targets) 0/1 for each target
 
         self.nn.eval()
 
@@ -106,7 +105,7 @@ class Trainer:
                 val_loss += loss.item() * batch_size
 
                 preds = torch.sigmoid(logits)
-                preds = (preds > 0.5).float()
+                preds = (preds > self.cfg.trainer.validator.threshold).float()
 
                 end_idx = start_idx + batch_size
                 predictions[start_idx:end_idx] = preds
@@ -115,29 +114,31 @@ class Trainer:
         
         val_loss = val_loss / samples_seen if samples_seen > 0 else 0.0
 
-        per_class_acc = compute_per_class_accuracy(predictions, self.val_dataset.target)
-        overall_acc = compute_overall_accuracy(predictions, self.val_dataset.target)
-        exact_match_ratio = compute_exact_match_ratio(predictions, self.val_dataset.target)
+        metrics = compute_metrics(predictions, self.val_dataset.target)
 
-        # Log validation metrics
-        metrics = {
-            "val/loss": val_loss,
-            "val/overall_accuracy": overall_acc,
-            "val/exact_match_ratio": exact_match_ratio,
+        mlflow_metrics = {
+            "val/overall/accuracy": metrics["overall_accuracy"],
+            "val/overall/precision": metrics["overall_precision"],
+            "val/overall/recall": metrics["overall_recall"],
+            "val/overall/f1": metrics["overall_f1"],
+            "val/overall/emr": metrics["exact_match_ratio"],
+            "val/loss": val_loss
         }
-        
-        # Log per-class metrics
-        for class_idx, acc in per_class_acc.items():
-            class_name = self.val_dataset.target_names[class_idx]
-            metrics[f"val/class_acc/{class_name}"] = acc
-        
-        mlflow.log_metrics(metrics, step=total_steps)  
 
-        return val_loss, overall_acc
+        for target_idx, target_name in enumerate(self.val_dataset.target_names):
+            mlflow_metrics[f"val/per_target/accuracy/{target_name}"] = metrics["per_target_accuracy"][target_idx]
+            mlflow_metrics[f"val/per_target/precision/{target_name}"] = metrics["per_target_precision"][target_idx]
+            mlflow_metrics[f"val/per_target/recall/{target_name}"] = metrics["per_target_recall"][target_idx]
+            mlflow_metrics[f"val/per_target/f1/{target_name}"] = metrics["per_target_f1"][target_idx]
+
+        mlflow.log_metrics(mlflow_metrics, step=total_steps)
+
+        return val_loss
 
     def train(self):
 
         log_config(self.cfg)
+        log_config_params(self.cfg)
 
         if self.cfg.checkpoint is not None:
             assert is_folder_filename_path(self.cfg.checkpoint), "Checkpoint path should be of form {run_id}/{tag}"
@@ -164,18 +165,15 @@ class Trainer:
                     # log batch metrics
                     if (batch_idx + 1) % self.cfg.trainer.log_interval_steps == 0 or batch_idx == len(self.train_loader) - 1:
                         mlflow.log_metrics({
-                            "train/batch_loss": loss.item(),
-                            "train/epoch": epoch + 1,
+                            "train/loss": loss.item(),
                             "train/lr": self.optimizer.param_groups[0]["lr"],
                         }, step=total_steps)
 
                     total_steps += 1
 
-                mlflow.log_metrics({"epoch_completed": epoch + 1}, step=total_steps)
-
                 # Validation
 
-                val_loss, val_acc = self.validate(total_steps=total_steps) 
+                val_loss = self.validate(total_steps=total_steps) 
 
                 if val_loss < self.best_val_loss:
                     self.best_val_loss = val_loss

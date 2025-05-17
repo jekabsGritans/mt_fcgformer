@@ -107,6 +107,21 @@ def log_config(cfg: DictConfig) -> None:
 
     upload_artifact(config_path) # saves to runs:/{current_run_id}/config.yaml
 
+def log_config_params(cfg: DictConfig) -> None:
+    """
+    Log the configuration parameters to MLflow as parameters.
+    This is useful for tracking the parameters used for each run.
+    
+    Args:
+        cfg (DictConfig): Configuration object from Hydra
+    """
+    params = _flatten_dict(cfg)
+    
+    # Log each parameter to MLflow
+    for key, value in params.items():
+        mlflow.log_param(key, value)
+
+
 def download_artifact(cfg: DictConfig, run_id: str, filename: str) -> str:
     """
     Download an artifact from a specific MLflow run.

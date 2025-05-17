@@ -5,10 +5,9 @@ Original Model (Keras Based): https://github.com/gj475/irchracterizationcnn
 Pytorch Reimplementation: https://github.com/lycaoduong/FcgFormer
 """
 
-from typing import Any, TypedDict
+from typing import TypedDict
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 from mlflow.models import ModelSignature
@@ -118,7 +117,7 @@ class IrCNN(BaseModel):
         ## None by default == could be true or false, so don't fix
         known_targets = [
             ParamSpec(name=target, dtype=DataType.boolean, default=None) for target in cfg.target_names
-        ]
+        ] if cfg.target_names else []
 
         ## Also bool. False by default, e.g. "hydrogen_bonding"
         flags = []
@@ -141,6 +140,20 @@ class IrCNN(BaseModel):
         )
 
         self._input_example = input_example
+
+        self._description = f"""
+        ## Input:
+        -  1D array of shape (-1, {cfg.model.input_dim}) representing the IR spectrum. For a single spectrum, use shape (1, {cfg.model.input_dim}).
+
+        ## Parameters:
+        - threshold: float, default=0.5. Above this threshold, the target is considered positive.
+        for each target:
+            - target_name: bool, default=None. If set, the prediction for this target is fixed.
+
+        ## Output:
+        - positive_targets: list of strings, names of the targets predicted to be positive.
+        - positive_probabilities: list of floats, probabilities for each target in positive_targets.
+        """
 
     # MLFlow
     def predict(self, context, model_input: np.ndarray, params: dict | None = None) -> list[dict]:

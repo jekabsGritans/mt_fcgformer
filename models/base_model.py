@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import mlflow.artifacts
+import numpy as np
 import torch
 import torch.nn as nn
 from mlflow.models import ModelSignature
@@ -78,7 +79,7 @@ class BaseModel(PythonModel, ABC):
         
     
     @abstractmethod
-    def predict(self, context, model_input, params=None):
+    def predict(self, context, model_input: np.ndarray, params: dict | None=None):
         """
         MLflow predict method to be implemented by subclasses
         """

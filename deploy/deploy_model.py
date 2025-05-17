@@ -59,7 +59,9 @@ def deploy_model_from_config(cfg: DictConfig):
     )
 
     client = MlflowClient(mlflow.get_tracking_uri())
-    model_info = client.get_latest_versions(model_name)[0]
+    all_versions = client.search_model_versions(f"name = '{model_name}'")  
+    model_info = max(all_versions, key=lambda v: int(v.version))
+
     client.set_model_version_tag(
         name=model_name,
         version=model_info.version,
@@ -77,4 +79,9 @@ def deploy_model_from_config(cfg: DictConfig):
         version=model_info.version,
         key='dataset_version',
         value=train_cfg.dataset
+    )
+    client.update_model_version(
+        name=model_name,
+        version=model_info.version,
+        description=model._description
     )

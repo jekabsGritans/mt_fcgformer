@@ -77,8 +77,6 @@ def configure_mlflow_auth():
     
     # If credentials are provided, add them to the tracking URI
     if username and password:
-        print(f"Using MLflow credentials for user: {username}")
-        
         # Parse the tracking URI to add authentication
         parsed_uri = urllib.parse.urlparse(tracking_uri)
         

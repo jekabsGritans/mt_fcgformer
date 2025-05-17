@@ -1,8 +1,7 @@
 ## TODO
 
-Finish this today/tmrw
------------------------------------------------------
 
+- [ ] implement FCGFormer together with pandas conversion
 - [ ] convert dataset to pandas
     - supported column types: spectra, categorical, boolean, numerical
     - transform only applied to spectrum pre-tokenization
@@ -12,30 +11,28 @@ Finish this today/tmrw
         - should keep whatever is fixed in gpu memory (is embedding learned?)
     - need to provide inputs and targets as lists of column names (verify unique)
 
-- [ ] when we start doing augmentations, fix train set before augmentations
+- [ ] explicit train test setting within notebook pre-augmentation? or maybe validation is ok on augmented
 
+- [ ] train transformer
+
+- [ ] attention visualisation regions as additional output
 ------------------------------------------------------
-
-- [ ] implement FCGFormer and try to train locally
 
 - [ ] separate prediction heads and try to train locally
 
 - [ ] visualize attention
     - [ ] separate visualisation for spectral regions and flags
 
-- [ ] fix some tokens (if doable)
-
-- [ ] more analytics (e.g. see increase in accuracy based on fixing some targets)
-
 -------------------------------------------------------
 
 - [ ] cloud deployment scripts + hyperparam search algos
-    - [ ] early stopping
-- [ ] model improvement
-- [ ] see hardware usage
 
 ------------------------------------------------------
 
+- [ ] fix some tokens (if doable)
+- [ ] more analytics (e.g. see increase in accuracy based on fixing some targets)
+
+------------------------------------------------------
 - [ ] mass fix docstrings and write readme
 
 

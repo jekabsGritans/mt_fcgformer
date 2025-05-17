@@ -42,6 +42,8 @@ class Trainer:
             self.nn.parameters(), lr=cfg.trainer.lr
         )
 
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer=self.optimizer, T_0=cfg.trainer.scheduler_t0, T_mult=cfg.trainer.scheduler_tmult)
+
         self.best_val_loss = float('inf')
 
         self.cfg = cfg
@@ -111,6 +113,7 @@ class Trainer:
                 predictions[start_idx:end_idx] = preds
 
                 start_idx = end_idx
+
         
         val_loss = val_loss / samples_seen if samples_seen > 0 else 0.0
 
@@ -121,6 +124,7 @@ class Trainer:
             "val/overall/precision": metrics["overall_precision"],
             "val/overall/recall": metrics["overall_recall"],
             "val/overall/f1": metrics["overall_f1"],
+            "val/overall/weighted_f1": metrics["weighted_avg_f1"],
             "val/overall/emr": metrics["exact_match_ratio"],
             "val/loss": val_loss
         }
@@ -147,6 +151,8 @@ class Trainer:
 
         self.best_val_loss = float("inf")
         total_steps = 0 # global step counter
+        patience = 0
+        max_patience = self.cfg.trainer.patience
 
         try:
             for epoch in range(self.cfg.trainer.epochs):
@@ -169,6 +175,8 @@ class Trainer:
                             "train/lr": self.optimizer.param_groups[0]["lr"],
                         }, step=total_steps)
 
+                    self.scheduler.step(epoch + batch_idx / len(self.train_loader)) # type: ignore
+
                     total_steps += 1
 
                 # Validation
@@ -179,8 +187,20 @@ class Trainer:
                     self.best_val_loss = val_loss
                     self.save_checkpoint("best")
                     self.save_checkpoint("latest")
+                    patience = 0 
+                    mlflow.log_metric("early_stop/patience", patience, step=total_steps)
 
-                elif (epoch + 1) % self.cfg.trainer.checkpoint_interval_epochs == 0:
-                    self.save_checkpoint(f"latest")
+                else:
+                    patience += 1
+                    mlflow.log_metric("early_stop/patience", patience, step=total_steps)
+
+                    if patience >= max_patience:
+                        print(f"Early stopping at epoch {epoch + 1} with patience {patience}.")
+                        mlflow.set_tag("early_stop", f"Stopped after {epoch+1} epochs with patience {patience}.")
+                        break
+
+                    # if didn't improve, still save every X epochs
+                    if (epoch + 1) % self.cfg.trainer.checkpoint_interval_epochs == 0:
+                        self.save_checkpoint(f"latest")
         finally:
             upload_sync_artifacts(self.cfg)

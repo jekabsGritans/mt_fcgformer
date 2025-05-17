@@ -1,6 +1,7 @@
 """
 Utility functions to compute different metrics and visualizations for validation/testing.
 """
+import numpy as np
 import torch
 
 
@@ -16,6 +17,14 @@ def compute_metrics(preds: torch.Tensor, targets: torch.Tensor) -> dict:
     per_target_precision = tp / (tp + fp + 1e-10)
     per_target_recall = tp / (tp + fn + 1e-10)
     per_target_f1 = 2 * (per_target_precision * per_target_recall) / (per_target_precision + per_target_recall + 1e-10)
+
+    # Calculate support (number of actual occurrences) for each target
+    support = targets.sum(dim=0)
+    total_support = support.sum()
+    
+    # Calculate weighted average F1 score
+    # Weight each target's F1 score by its proportion in the dataset
+    weighted_avg_f1 = torch.sum((support / total_support) * per_target_f1)
 
     # overall confusion
     overall_tp = tp.sum()
@@ -35,13 +44,15 @@ def compute_metrics(preds: torch.Tensor, targets: torch.Tensor) -> dict:
         "per_target_precision": per_target_precision,
         "per_target_recall": per_target_recall,
         "per_target_f1": per_target_f1,
+        "per_target_support": support,
     }
 
     out_vals = {
         "overall_accuracy": overall_acc,
         "overall_precision": overall_precision,
         "overall_recall": overall_recall,
-        "overall_f1": overall_f1,
+        "overall_f1": overall_f1, 
+        "weighted_avg_f1": weighted_avg_f1,
         "exact_match_ratio": exact_match_ratio
     }
 

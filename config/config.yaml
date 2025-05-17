@@ -14,10 +14,14 @@ hydra:
 dataset: 7bb299184c1941ec90459eb11f1409eb
 
 trainer:
-  lr: 1e-3
-  epochs: 10
+  lr: 2e-3
+  epochs: 200
   batch_size: 32
   shuffle: True
+  patience: 10 # stop training if validation loss does not improve for x subsequent epochs
+
+  scheduler_t0: 40
+  scheduler_tmult: 2
 
   checkpoint_interval_epochs: 2 # checkpoint every 2 epochs
   log_interval_steps: 100 # log metrics every 100 training steps

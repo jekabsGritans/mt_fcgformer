@@ -12,9 +12,7 @@ Finish this today/tmrw
         - should keep whatever is fixed in gpu memory (is embedding learned?)
     - need to provide inputs and targets as lists of column names (verify unique)
 
-- [ ] improve training (LR scheduling and good optimizer)
-
-- [ ] train IRCnn locally
+- [ ] when we start doing augmentations, fix train set before augmentations
 
 ------------------------------------------------------
 
@@ -27,22 +25,18 @@ Finish this today/tmrw
 
 - [ ] fix some tokens (if doable)
 
+- [ ] more analytics (e.g. see increase in accuracy based on fixing some targets)
+
 -------------------------------------------------------
 
-- [ ] extra logs (mass edit)
-    - [ ] logs instead of prints
-    - [ ] saving to file and uploading artifact
-    - [ ] resource usage logs
-
 - [ ] cloud deployment scripts + hyperparam search algos
+    - [ ] early stopping
 - [ ] model improvement
+- [ ] see hardware usage
 
 ------------------------------------------------------
 
 - [ ] mass fix docstrings and write readme
-
-- [ ] performance eval
-    - optimal threshold can be found by maximising f1 in CNN paper
 
 
 ## Datasets

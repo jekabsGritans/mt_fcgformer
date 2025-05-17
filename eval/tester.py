@@ -83,6 +83,7 @@ class Tester:
             "overall/precision": metrics["overall_precision"],
             "overall/recall": metrics["overall_recall"],
             "overall/f1": metrics["overall_f1"],
+            "overall/weighted_f1": metrics["weighted_avg_f1"],
             "overall/emr": metrics["exact_match_ratio"]
         }
 

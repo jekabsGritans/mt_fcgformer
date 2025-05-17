@@ -179,7 +179,7 @@ class Trainer:
 
                     total_steps += 1
 
-                # Validation
+                mlflow.log_metric("epoch", epoch + 1, step=total_steps)
 
                 val_loss = self.validate(total_steps=total_steps) 
 

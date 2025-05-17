@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import hydra
 import mlflow
 from hydra.utils import instantiate
@@ -9,7 +11,8 @@ from deploy import deploy_model_from_config
 from eval import Tester
 from train import Trainer
 from utils.misc import is_folder_filename_path
-from utils.mlflow_utils import configure_mlflow_auth
+from utils.mlflow_utils import (configure_mlflow_auth,
+                                get_experiment_name_from_run)
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.3")
@@ -30,7 +33,17 @@ def main(cfg: DictConfig):
     # start MLflow run
     mlflow.set_experiment(cfg.experiment_name)
 
-    with mlflow.start_run(run_name=cfg.run_name) as run:
+    # mode_model_dataset_timestamp
+    dataset_name = get_experiment_name_from_run(cfg.dataset)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    run_name = f"{cfg.mode}_{cfg.model.name}_{dataset_name}_{timestamp}"
+    with mlflow.start_run(run_name=run_name) as run:
+        
+        mlflow.set_tag("mode", cfg.mode)
+        mlflow.set_tag("model", cfg.model.name)
+        mlflow.set_tag("dataset", dataset_name)
+
         if cfg.mode == "train":
             train_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset, split="train", transform=train_transforms)
             val_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset, split="valid", transform=eval_transforms)

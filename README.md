@@ -24,6 +24,13 @@ Finish this today/tmrw
         - should keep whatever is fixed in gpu memory (is embedding learned?)
     - need to provide inputs and targets as lists of column names (verify unique)
 
+
+    - mlflow input is always just spectrum. 
+    - params are:
+        - bool for each target. Default = None, so if unspecified treated as unknown
+        - bool for each flag (e.g. specific solvent used). Default = false.
+
+
 - [ ] improve training (LR scheduling and good optimizer)
 
 - [ ] train IRCnn locally

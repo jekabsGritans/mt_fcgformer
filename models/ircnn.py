@@ -12,7 +12,8 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from mlflow.models import ModelSignature
-from mlflow.types import ColSpec, DataType, ParamSchema, ParamSpec, Schema
+from mlflow.types import (ColSpec, DataType, ParamSchema, ParamSpec, Schema,
+                          TensorSpec)
 from mlflow.types.schema import Array
 from omegaconf import DictConfig
 
@@ -99,37 +100,39 @@ class IrCNN(BaseModel):
 
     def init_from_config(self, cfg: DictConfig):
 
-        # TODO: target names and pos weights are null by default in config, in which case computed from dataset
-
         # Initialize the network
         self.nn = IrCNNModule(cfg.model.input_dim, cfg.model.output_dim, cfg.model.kernel_size, cfg.model.dropout_p)
         self.target_names = cfg.target_names
         
-        # Define MLflow schemas
+        # Input is only spectrum.
         input_schema = Schema([
-            ColSpec(type=Array(DataType.double), name="spectrum")
-        ]) 
+            TensorSpec(np.dtype(np.float32), shape=(-1, cfg.model.input_dim))
+        ])
 
+        # Known labels are params
+
+        ## Standard params
+        params = [ParamSpec(name="threshold", dtype=DataType.double, default=0.5)]
+
+        ## Known targets 
+        ## None by default == could be true or false, so don't fix
+        known_targets = [
+            ParamSpec(name=target, dtype=DataType.boolean, default=None) for target in cfg.target_names
+        ]
+
+        ## Also bool. False by default, e.g. "hydrogen_bonding"
+        flags = []
+
+        param_schema = ParamSchema(params + known_targets + flags)
+
+        # Output is a list of positive targets and their probabilities
         output_schema = Schema([
-            ColSpec(
-                type=Array(DataType.string),
-                name="positive_targets"
-            ),
-            ColSpec(
-                type=Array(DataType.double),
-                name="positive_probabilities"
-            ),
+            ColSpec(type=Array(DataType.string), name="positive_targets"),
+            ColSpec(type=Array(DataType.double), name="positive_probabilities")
         ])
 
-        param_schema = ParamSchema([
-            ParamSpec(
-                name="threshold",
-                dtype=DataType.double,
-                default=0.5
-            )
-        ])
-
-        input_example = pd.DataFrame({"spectrum": [np.zeros(cfg.model.input_dim, dtype=np.float32).tolist()]})
+        # Batched input of spectra
+        input_example = np.zeros((1, cfg.model.input_dim), dtype=np.float32)
 
         self._signature = ModelSignature(
             inputs=input_schema,
@@ -140,26 +143,15 @@ class IrCNN(BaseModel):
         self._input_example = input_example
 
     # MLFlow
-    def predict(self, context, model_input: list[InputRow], params: dict[str, Any] | None = None):
-        """
-        Make predictions with the model.
-        
-        Args:
-            context: MLflow context
-            model_input: List of input rows
-            params: Additional parameters
-            
-        Returns:
-            List of predictions
-        """
+    def predict(self, context, model_input: np.ndarray, params: dict | None = None) -> list[dict]:
+        """ Make predictions with the model. """
+
         assert self.target_names is not None, "Target names not set."
 
         threshold = params.get("threshold", 0.5) if params else 0.5
         results = []
-        
-        for row in model_input:
-            spectrum = torch.tensor(row["spectrum"], dtype=torch.float32)
 
+        for spectrum in model_input:
             # preprocess like in evaluation
             spectrum = self.spectrum_eval_transform(spectrum)
 
@@ -169,6 +161,13 @@ class IrCNN(BaseModel):
             # forward pass
             logits = self.nn.forward(spectrum)
             probabilities = torch.sigmoid(logits).squeeze(0).tolist()
+
+            # apply known targets
+            if params is not None:
+                for target in self.target_names:
+                    if target in params:
+                        if params[target] is not None:
+                            probabilities[self.target_names.index(target)] = 1.0 if params[target] else 0.0
 
             out_probs, out_targets = [], []
             for prob, target in zip(probabilities, self.target_names):

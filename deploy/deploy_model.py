@@ -1,7 +1,9 @@
 import mlflow
 from hydra.utils import instantiate
+from mlflow.tracking import MlflowClient
 from omegaconf import DictConfig, OmegaConf
 
+import train
 from utils.misc import is_folder_filename_path
 from utils.mlflow_utils import (download_artifact,
                                 get_experiment_name_from_run, upload_artifact)
@@ -55,5 +57,24 @@ def deploy_model_from_config(cfg: DictConfig):
             "checkpoint": cfg.checkpoint,
         }
     )
-    
-    print(f"Model URI: {model_info.model_uri}")
+
+    client = MlflowClient(mlflow.get_tracking_uri())
+    model_info = client.get_latest_versions(model_name)[0]
+    client.set_model_version_tag(
+        name=model_name,
+        version=model_info.version,
+        key='model',
+        value=train_cfg.model.name
+    )
+    client.set_model_version_tag(
+        name=model_name,
+        version=model_info.version,
+        key='dataset',
+        value=dataset_name
+    )
+    client.set_model_version_tag(
+        name=model_name,
+        version=model_info.version,
+        key='dataset_version',
+        value=train_cfg.dataset
+    )

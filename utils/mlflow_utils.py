@@ -136,6 +136,10 @@ def download_artifact(cfg: DictConfig, run_id: str, filename: str) -> str:
 
     os.makedirs(dst_dir, exist_ok=True)
 
+    local_path = os.path.join(dst_dir, filename)
+    if os.path.isfile(local_path):
+        print(f"Artifact {filename} already exists in {dst_dir}. Skipping download.")
+        return local_path
     try:
         mlflow.artifacts.download_artifacts(run_id=run_id, artifact_path=filename, dst_path=dst_dir) # type: ignore
     except Exception as e:

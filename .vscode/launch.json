@@ -37,7 +37,7 @@
             "args": [
                 "mode=test",
                 "device=cpu",
-                "checkpoint=c7dbf182bd6148fbbd8fa80f6eba511f/best",
+                "checkpoint=b516fc37e5ba44c08d57b7a4cbd7d5e5/best",
                 "experiment_name=debug"
             ]
         },
@@ -50,7 +50,7 @@
             "args": [
                 "mode=test",
                 "device=cuda:0",
-                "checkpoint=c7dbf182bd6148fbbd8fa80f6eba511f/best",
+                "checkpoint=b516fc37e5ba44c08d57b7a4cbd7d5e5/best",
                 "experiment_name=debug"
             ]
         },
@@ -62,7 +62,7 @@
             "console": "integratedTerminal",
             "args": [
                 "mode=deploy",
-                "checkpoint=c7dbf182bd6148fbbd8fa80f6eba511f/best",
+                "checkpoint=b516fc37e5ba44c08d57b7a4cbd7d5e5/best",
                 "experiment_name=debug"
             ]
         },       

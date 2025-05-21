@@ -25,7 +25,7 @@ def main(cfg: DictConfig):
     eval_transforms = T.Compose.from_hydra(cfg.eval_transforms)
 
     # init model
-    model = instantiate(cfg.model.init, cfg=cfg)
+    model = instantiate(cfg.model.init, cfg=cfg, _recursive_=False)
     nn = model.nn
 
     assert cfg.mode in ["train", "test", "deploy"], f"Invalid mode: {cfg.mode}. Must be one of ['train', 'test', 'deploy']"

@@ -103,23 +103,3 @@ class BaseModel(PythonModel, ABC):
         checkpoint_data = torch.load(checkpoint_path, map_location="cpu")
         self.nn.load_state_dict(checkpoint_data)
         self.nn.eval()
-    
-    def load_context(self, context):
-        """
-        Called by MLflow to load the model context.
-        """
-
-        # Load config and initialize
-        cfg_uri = context.artifacts.get("config")
-        cfg_path = mlflow.artifacts.download_artifacts(artifact_uri=cfg_uri, dst_path=None)
-        cfg = OmegaConf.load(cfg_path)
-        self.init_from_config(cfg) # type: ignore
-
-        # Load eval transforms
-        self.spectrum_eval_transform = Compose.from_hydra(cfg.eval_transforms)
-
-        # Load checkpoint
-        checkpoint_uri = context.artifacts.get("model_checkpoint")
-        checkpoint_path = mlflow.artifacts.download_artifacts(artifact_uri=checkpoint_uri, dst_path=None)
-        self.load_checkpoint(checkpoint_path)
-

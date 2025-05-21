@@ -14,11 +14,12 @@ hydra:
 dataset: 7bb299184c1941ec90459eb11f1409eb
 
 trainer:
-  lr: 2e-3
+  lr: 1e-3
   epochs: 200
   batch_size: 32
   shuffle: True
-  patience: 10 # stop training if validation loss does not improve for x subsequent epochs
+  patience: 100 # stop training if validation loss does not improve for x subsequent epochs
+  patience_threshold: 0.1
 
   scheduler_t0: 40
   scheduler_tmult: 2

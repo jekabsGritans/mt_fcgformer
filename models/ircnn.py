@@ -5,26 +5,18 @@ Original Model (Keras Based): https://github.com/gj475/irchracterizationcnn
 Pytorch Reimplementation: https://github.com/lycaoduong/FcgFormer
 """
 
-from typing import TypedDict
-
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 from mlflow.models import ModelSignature
-from mlflow.types import (ColSpec, DataType, ParamSchema, ParamSpec, Schema,
-                          TensorSpec)
+from mlflow.types import ColSpec, DataType, ParamSchema, ParamSpec, Schema
 from mlflow.types.schema import Array
 from omegaconf import DictConfig
 
 from models.base_model import BaseModel, NeuralNetworkModule
+from utils.transforms import Compose
 
-
-class InputRow(TypedDict):
-    spectrum: np.ndarray  # (input_dim,)
-
-class OutputRow(TypedDict):
-    positive_targets: list[str]
-    positive_probabilities: list[float]
 
 class IrCNNModule(NeuralNetworkModule):
     """Neural network architecture for IrCNN"""
@@ -99,13 +91,15 @@ class IrCNN(BaseModel):
 
     def init_from_config(self, cfg: DictConfig):
 
+        self.spectrum_eval_transform = Compose.from_hydra(cfg.eval_transforms)
+
         # Initialize the network
         self.nn = IrCNNModule(cfg.model.input_dim, cfg.model.output_dim, cfg.model.kernel_size, cfg.model.dropout_p)
         self.target_names = cfg.target_names
         
         # Input is only spectrum.
         input_schema = Schema([
-            TensorSpec(np.dtype(np.float64), shape=(-1, cfg.model.input_dim))
+            ColSpec(Array(DataType.double), name="spectrum")
         ])
 
         # Known labels are params
@@ -131,7 +125,7 @@ class IrCNN(BaseModel):
         ])
 
         # Batched input of spectra
-        input_example = np.zeros((1, cfg.model.input_dim))
+        input_example = pd.DataFrame({"spectrum": [np.zeros((cfg.model.input_dim,)).tolist()]})  # type: ignore
 
         self._signature = ModelSignature(
             inputs=input_schema,
@@ -156,7 +150,7 @@ class IrCNN(BaseModel):
         """
 
     # MLFlow
-    def predict(self, context, model_input: np.ndarray, params: dict | None = None) -> list[dict]:
+    def predict(self, context, model_input: pd.DataFrame, params: dict | None = None) -> list[dict]:
         """ Make predictions with the model. """
 
         assert self.target_names is not None, "Target names not set."
@@ -164,7 +158,11 @@ class IrCNN(BaseModel):
         threshold = params.get("threshold", 0.5) if params else 0.5
         results = []
 
-        for spectrum in model_input:
+        spectra = np.stack(model_input["spectrum"].to_numpy()) # type: ignore
+
+        self.nn.eval()
+
+        for spectrum in spectra:
             # preprocess like in evaluation
             spectrum = torch.from_numpy(spectrum).float()
             spectrum = self.spectrum_eval_transform(spectrum)

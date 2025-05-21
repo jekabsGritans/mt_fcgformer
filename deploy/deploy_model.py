@@ -3,10 +3,8 @@ from hydra.utils import instantiate
 from mlflow.tracking import MlflowClient
 from omegaconf import DictConfig, OmegaConf
 
-import train
 from utils.misc import is_folder_filename_path
-from utils.mlflow_utils import (download_artifact,
-                                get_experiment_name_from_run, upload_artifact)
+from utils.mlflow_utils import download_artifact, get_experiment_name_from_run
 
 
 def deploy_model_from_config(cfg: DictConfig):
@@ -37,17 +35,12 @@ def deploy_model_from_config(cfg: DictConfig):
     model_name = f"{train_cfg.model.name}_{dataset_name}"
     mlflow.set_tag("mlflow.runName", f"deploy_{model_name}_{run_id}")
 
-    # Artifacts needed to load the model
-    checkpoint_uri = f"runs:/{run_id}/{checkpoint_tag}_model.pt"
-    config_uri = f"runs:/{run_id}/config.yaml"
-
     # Retrieve model class
-    model = instantiate(train_cfg.model.init, cfg=train_cfg)
+    model = instantiate(train_cfg.model.init, cfg=train_cfg, _recursive_=False)
 
     model_info = mlflow.pyfunc.log_model(
         artifact_path="model",
         python_model=model,
-        artifacts={"config": config_uri, "model_checkpoint": checkpoint_uri},
         code_paths=["models", "utils"],
         signature=model._signature,
         input_example=model._input_example,

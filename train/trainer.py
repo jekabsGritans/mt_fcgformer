@@ -191,13 +191,14 @@ class Trainer:
                     mlflow.log_metric("early_stop/patience", patience, step=total_steps)
 
                 else:
-                    patience += 1
-                    mlflow.log_metric("early_stop/patience", patience, step=total_steps)
+                    if val_loss > self.best_val_loss + self.cfg.trainer.patience_threshold:
+                        patience += 1
+                        mlflow.log_metric("early_stop/patience", patience, step=total_steps)
 
-                    if patience >= max_patience:
-                        print(f"Early stopping at epoch {epoch + 1} with patience {patience}.")
-                        mlflow.set_tag("early_stop", f"Stopped after {epoch+1} epochs with patience {patience}.")
-                        break
+                        if patience >= max_patience:
+                            print(f"Early stopping at epoch {epoch + 1} with patience {patience}.")
+                            mlflow.set_tag("early_stop", f"Stopped after {epoch+1} epochs with patience {patience}.")
+                            break
 
                     # if didn't improve, still save every X epochs
                     if (epoch + 1) % self.cfg.trainer.checkpoint_interval_epochs == 0:

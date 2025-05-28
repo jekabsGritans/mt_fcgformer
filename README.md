@@ -39,6 +39,9 @@
 ## Spectrum handling
 - for training / dataset, we have already-interpolated spectra of wavenum 400-4000 cm^-1 length 3602 (as in FCGFormer paper)
 
+## Attention visualisation
+- the transformer resizes spectrum to 1024 and then splits it into 64 patches of 16
+
 ## Datasets
 - 2 kinds of transforms:
     - simple augmentations like adding noise, done at training time

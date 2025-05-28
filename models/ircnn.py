@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from mlflow.models import ModelSignature
 from mlflow.types import ColSpec, DataType, ParamSchema, ParamSpec, Schema
-from mlflow.types.schema import Array
+from mlflow.types.schema import AnyType, Array
 from omegaconf import DictConfig
 
 from models.base_model import BaseModel, NeuralNetworkModule
@@ -123,7 +123,10 @@ class IrCNN(BaseModel):
         # Output is a list of positive targets and their probabilities
         output_schema = Schema([
             ColSpec(type=Array(DataType.string), name="positive_targets"),
-            ColSpec(type=Array(DataType.double), name="positive_probabilities")
+            ColSpec(type=Array(DataType.double), name="positive_probabilities"),
+
+            # interpret as list of list of tuples (min, max, val) where min,max wavenums and val between 0 and 1
+            ColSpec(type=AnyType(), name="attention"), # [(400, 4000, 0.0), ...]
         ])
 
         # Batched input of spectra
@@ -193,10 +196,28 @@ class IrCNN(BaseModel):
                 if prob > threshold:
                     out_probs.append(prob)
                     out_targets.append(target)
-            
+
+
+            dummy_attention: list[list[tuple[float, float, float]]] = []
+            for _ in range(len(out_targets)):
+                max_num_regions = np.random.randint(1, 5)
+                regions = []
+                prev_end = 0
+                for _ in range(max_num_regions):
+                    start = np.random.randint(prev_end, 3600)
+                    end = np.random.randint(start + 1, 3600)
+                    value = np.random.uniform(0.0, 1.0)
+                    regions.append((start + 400, end + 400, value))
+                    prev_end = end
+                    if prev_end >= 3600:
+                        break
+                    
+                dummy_attention.append(regions)
+
             results.append({
                 "positive_targets": out_targets, 
-                "positive_probabilities": out_probs
+                "positive_probabilities": out_probs,
+                "attention": dummy_attention,
             })
         
         return results

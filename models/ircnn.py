@@ -99,7 +99,8 @@ class IrCNN(BaseModel):
         
         # Input is only spectrum.
         input_schema = Schema([
-            ColSpec(Array(DataType.double), name="spectrum")
+            ColSpec(Array(DataType.double), name="spectrum_x"),
+            ColSpec(Array(DataType.double), name="spectrum_y"),
         ])
 
         # Known labels are params
@@ -158,12 +159,17 @@ class IrCNN(BaseModel):
         threshold = params.get("threshold", 0.5) if params else 0.5
         results = []
 
-        spectra = np.stack(model_input["spectrum"].to_numpy()) # type: ignore
+        spectra_x = np.stack(model_input["spectrum_x"].to_numpy()) # type: ignore
+        spectra_y = np.stack(model_input["spectrum_y"].to_numpy()) # type: ignore
 
         self.nn.eval()
 
-        for spectrum in spectra:
+        for spectrum_x, spectrum_y in zip(spectra_x, spectra_y):
+            # interpolate
+            spectrum = ...
+
             # preprocess like in evaluation
+
             spectrum = torch.from_numpy(spectrum).float()
             spectrum = self.spectrum_eval_transform(spectrum)
 

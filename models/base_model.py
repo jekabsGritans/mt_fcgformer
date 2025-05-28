@@ -8,7 +8,7 @@ import torch.nn as nn
 from mlflow.models import ModelSignature
 from mlflow.pyfunc import PythonModel  # type: ignore
 from omegaconf import DictConfig, OmegaConf
-
+import pandas as pd
 from utils.transforms import Compose, Transform
 
 
@@ -79,7 +79,7 @@ class BaseModel(PythonModel, ABC):
         
     
     @abstractmethod
-    def predict(self, context, model_input: np.ndarray, params: dict | None=None):
+    def predict(self, context, model_input: pd.DataFrame, params: dict | None=None):
         """
         MLflow predict method to be implemented by subclasses
         """

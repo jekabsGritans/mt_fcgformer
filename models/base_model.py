@@ -3,12 +3,13 @@ from typing import Any
 
 import mlflow.artifacts
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 from mlflow.models import ModelSignature
 from mlflow.pyfunc import PythonModel  # type: ignore
 from omegaconf import DictConfig, OmegaConf
-import pandas as pd
+
 from utils.transforms import Compose, Transform
 
 
@@ -42,6 +43,7 @@ class NeuralNetworkModule(nn.Module, ABC):
         """
         Perform a single forward pass on a batch and return the loss.
         """
+        #TODO: adapt  this for new dataset
         x = batch["inputs"]
         y = batch["target"]
         logits = self.forward(x)

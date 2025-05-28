@@ -15,6 +15,7 @@ from mlflow.types.schema import Array
 from omegaconf import DictConfig
 
 from models.base_model import BaseModel, NeuralNetworkModule
+from utils.misc import interpolate
 from utils.transforms import Compose
 
 
@@ -166,7 +167,7 @@ class IrCNN(BaseModel):
 
         for spectrum_x, spectrum_y in zip(spectra_x, spectra_y):
             # interpolate
-            spectrum = ...
+            spectrum = interpolate(x=spectrum_x, y=spectrum_y, min_x=400, max_x=4000, num_points=3600)
 
             # preprocess like in evaluation
 

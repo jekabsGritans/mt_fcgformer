@@ -36,6 +36,9 @@
 - [ ] mass fix docstrings and write readme
 
 
+## Spectrum handling
+- for training / dataset, we have already-interpolated spectra of wavenum 400-4000 cm^-1 length 3602 (as in FCGFormer paper)
+
 ## Datasets
 - 2 kinds of transforms:
     - simple augmentations like adding noise, done at training time

@@ -183,7 +183,7 @@ class MLFlowDataset(Dataset):
         if self.spectrum_transform is not None:
             spectrum = self.spectrum_transform(spectrum)
 
-        out["spectrum"] = spectrum
+        out["spectrum"] = spectrum # this is pre-interpolated
         out["fg_targets"] = self.fg_targets[index]
         out["aux_bool_targets"] = self.aux_bool_targets[index]
         out["aux_float_targets"] = self.aux_float_targets[index]

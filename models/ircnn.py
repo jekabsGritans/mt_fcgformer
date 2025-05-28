@@ -5,6 +5,8 @@ Original Model (Keras Based): https://github.com/gj475/irchracterizationcnn
 Pytorch Reimplementation: https://github.com/lycaoduong/FcgFormer
 """
 
+import random
+
 import numpy as np
 import pandas as pd
 import torch
@@ -130,7 +132,9 @@ class IrCNN(BaseModel):
         ])
 
         # Batched input of spectra
-        input_example = pd.DataFrame({"spectrum": [np.zeros((cfg.model.input_dim,)).tolist()]})  # type: ignore
+        a = np.zeros((100, ), dtype=np.float32).tolist()  # Example input for the schema
+        
+        input_example = pd.DataFrame({"spectrum_x": [a], "spectrum_y": [a]})  # type: ignore
 
         self._signature = ModelSignature(
             inputs=input_schema,
@@ -197,22 +201,11 @@ class IrCNN(BaseModel):
                     out_probs.append(prob)
                     out_targets.append(target)
 
-
-            dummy_attention: list[list[tuple[float, float, float]]] = []
+            dummy_attention = []
             for _ in range(len(out_targets)):
-                max_num_regions = np.random.randint(1, 5)
-                regions = []
-                prev_end = 0
-                for _ in range(max_num_regions):
-                    start = np.random.randint(prev_end, 3600)
-                    end = np.random.randint(start + 1, 3600)
-                    value = np.random.uniform(0.0, 1.0)
-                    regions.append((start + 400, end + 400, value))
-                    prev_end = end
-                    if prev_end >= 3600:
-                        break
-                    
-                dummy_attention.append(regions)
+                dummy_regions = self.generate_random_non_overlapping_intervals(k=5, min_val=400, max_val=4000, min_interval_length=10)
+                att = [(start, end, random.random()) for start, end in dummy_regions]  # Dummy attention values
+                dummy_attention.append(att)
 
             results.append({
                 "positive_targets": out_targets, 
@@ -221,3 +214,103 @@ class IrCNN(BaseModel):
             })
         
         return results
+
+
+    def generate_random_non_overlapping_intervals(self, k, min_val, max_val, min_interval_length=1, max_attempts_per_interval=100):
+        """
+        Generates at most k random non-overlapping intervals within a specified range.
+
+        Intervals are considered non-overlapping if their closed intervals do not intersect.
+        For example:
+        - [1, 5] and [5, 10] are considered overlapping because they share the point 5.
+        - [1, 4] and [5, 10] are non-overlapping.
+
+        Args:
+            k (int): The maximum number of intervals to generate. The function will try
+                    to generate up to k intervals, but may return fewer if it cannot
+                    find enough non-overlapping ones within the given constraints.
+            min_val (int): The minimum possible value for any point (start or end) in an interval.
+            max_val (int): The maximum possible value for any point (start or end) in an interval.
+            min_interval_length (int, optional): The minimum length of a generated interval.
+                                                Defaults to 1. Must be a positive integer.
+            max_attempts_per_interval (int, optional): The maximum number of attempts to find
+                                                    a non-overlapping interval for each
+                                                    desired interval. This prevents infinite
+                                                    loops in scenarios where space is limited.
+                                                    Defaults to 100.
+
+        Returns:
+            list: A list of tuples, where each tuple (start, end) represents a non-overlapping interval.
+                The intervals in the returned list are sorted by their start times for consistency.
+        """
+        # --- Input Validation ---
+        if min_val >= max_val:
+            print("Error: min_val must be strictly less than max_val.")
+            return []
+        if min_interval_length <= 0:
+            print("Error: min_interval_length must be a positive integer.")
+            return []
+        if min_interval_length > (max_val - min_val):
+            print("Warning: min_interval_length is greater than the total available range. No intervals can be generated.")
+            return []
+        if k <= 0:
+            print("Warning: k must be a positive integer. No intervals will be generated.")
+            return []
+
+        intervals = [] # This list will store the successfully generated non-overlapping intervals
+        
+        # Attempt to generate up to 'k' intervals
+        for _ in range(k):
+            found_non_overlapping = False
+            # Try 'max_attempts_per_interval' times to find a suitable interval
+            for _attempt in range(max_attempts_per_interval):
+                # Calculate the effective maximum possible start point for a new interval.
+                # This ensures that even an interval of 'min_interval_length' can fit
+                # entirely within the [min_val, max_val] range.
+                effective_max_start = max_val - min_interval_length
+
+                # If there's no longer enough space to even fit a minimum length interval,
+                # break out of the attempts loop and the outer loop (no more intervals can be added).
+                if effective_max_start < min_val:
+                    break 
+
+                # Generate a random start point for the new interval within the valid range.
+                start = random.randint(min_val, effective_max_start)
+                
+                # Generate a random end point for the new interval.
+                # It must be at least 'start + min_interval_length' and at most 'max_val'.
+                end = random.randint(start + min_interval_length, max_val)
+
+                new_interval = (start, end)
+
+                # --- Overlap Check ---
+                # Assume no overlap initially
+                overlaps = False
+                # Iterate through all already generated intervals to check for overlap
+                for existing_interval in intervals:
+                    s_exist, e_exist = existing_interval # Unpack existing interval (start, end)
+                    s_new, e_new = new_interval         # Unpack new candidate interval (start, end)
+                    
+                    # Condition for overlap between two closed intervals [s1, e1] and [s2, e2]:
+                    # They overlap if (s1 <= e2) AND (s2 <= e1).
+                    # This correctly identifies overlap even if they just touch at an endpoint (e.g., [1,5] and [5,10]).
+                    if s_new <= e_exist and s_exist <= e_new:
+                        overlaps = True
+                        break # Found an overlap, no need to check further existing intervals
+                
+                # If no overlap was found with any existing intervals, add the new interval
+                if not overlaps:
+                    intervals.append(new_interval)
+                    found_non_overlapping = True # Mark that we successfully found an interval
+                    break # Break from the attempts loop, move to the next desired interval
+            
+            # If after 'max_attempts_per_interval' attempts, a non-overlapping interval
+            # could not be found, stop trying to add more intervals. This prevents
+            # the function from getting stuck in an infinite loop if the space is too dense.
+            if not found_non_overlapping:
+                break
+
+        # Sort the generated intervals by their start times. This makes the output consistent
+        # and easier to work with.
+        intervals.sort()
+        return intervals

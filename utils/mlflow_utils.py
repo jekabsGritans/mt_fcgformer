@@ -5,7 +5,7 @@ import urllib.parse
 
 import mlflow
 from mlflow.tracking import MlflowClient
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 
 
 def upload_sync_artifacts(cfg: DictConfig) -> int:
@@ -120,7 +120,7 @@ def log_config_params(cfg: DictConfig) -> None:
     # Log each parameter to MLflow
     for key, value in params.items():
         mlflow.log_param(key, value)
-
+    
 
 def download_artifact(cfg: DictConfig, run_id: str, filename: str) -> str:
     """
@@ -162,21 +162,58 @@ def upload_artifact(file_path: str) -> None:
 
     mlflow.log_artifact(file_path)
 
+
 def _flatten_dict(d, parent_key='', sep='.'):
     """
-    Flatten a nested dictionary for MLflow parameter logging
+    Flatten a nested dictionary, including OmegaConf DictConfig and ListConfig,
+    for MLflow parameter logging.
+    Lists containing dictionaries or other lists are processed element by element.
+    Dictionaries within lists are flattened with indexed keys.
+    Simple lists (of primitives) and other complex objects are converted to strings.
     """
     items = []
+    # d is expected to be a dict or DictConfig.
     for k, v in d.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k
-        if isinstance(v, dict):
+
+        if isinstance(v, (DictConfig, dict)):
             items.extend(_flatten_dict(v, new_key, sep=sep).items())
-        elif isinstance(v, (list, tuple)):
-            # Convert lists to strings to avoid MLflow errors
-            items.append((new_key, str(v)))
+        elif isinstance(v, (ListConfig, list, tuple)):
+            # Check if the list contains complex structures (dicts or other lists)
+            # that need individual processing.
+            contains_complex_structure = False
+            if v:  # Only check if list is not empty
+                for item_check in v:
+                    if isinstance(item_check, (DictConfig, dict, ListConfig, list, tuple)):
+                        contains_complex_structure = True
+                        break
+            
+            if contains_complex_structure:
+                for i, item in enumerate(v):
+                    item_key = f"{new_key}{sep}{i}"
+                    if isinstance(item, (DictConfig, dict)):
+                        items.extend(_flatten_dict(item, item_key, sep=sep).items())
+                    elif isinstance(item, (ListConfig, list, tuple)):
+                        # For lists/tuples nested deeper, convert to string.
+                        # This avoids overly complex keys or too many parameters.
+                        items.append((item_key, str(item)))
+                    elif not isinstance(item, (str, int, float, bool)) and item is not None:
+                        # Other non-primitive, non-dict/list complex objects within a list: convert to string.
+                        items.append((item_key, str(item)))
+                    else:
+                        # Primitives (or None) within a list that is being flattened.
+                        items.append((item_key, item))
+            else:
+                # List is empty or contains only primitives (or complex objects that will be stringified).
+                # Convert the entire list to its string representation.
+                items.append((new_key, str(v)))
         elif not isinstance(v, (str, int, float, bool)) and v is not None:
-            # Skip complex objects
-            continue
+            # For other complex objects (not dicts, not lists, not primitives), convert to string.
+            # This replaces the original behavior of skipping them.
+            items.append((new_key, str(v)))
         else:
+            # Primitives (str, int, float, bool) or None.
+            # MLflow's log_param handles None by not logging the parameter.
             items.append((new_key, v))
+            
     return dict(items)

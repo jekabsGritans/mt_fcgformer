@@ -34,7 +34,8 @@ def main(cfg: DictConfig):
     mlflow.set_experiment(cfg.experiment_name)
 
     # mode_model_dataset_timestamp
-    dataset_name = get_experiment_name_from_run(cfg.dataset)
+    dataset_name = get_experiment_name_from_run(cfg.dataset_id)
+    cfg.dataset_name = dataset_name
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     run_name = f"{cfg.mode}_{cfg.model.name}_{dataset_name}_{timestamp}"

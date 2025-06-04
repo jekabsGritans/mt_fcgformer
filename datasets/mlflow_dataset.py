@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Callable
 
+import numpy as np
 import pandas as pd
 import torch
 from omegaconf import DictConfig
@@ -23,14 +24,14 @@ class MLFlowDataset(Dataset):
 
     fg_names: list[str] # names of functional groups
     fg_targets: torch.Tensor # (num_samples, fg) bool
-    fg_pos_weights: torch.Tensor # (fg,) float
+    fg_pos_weights: list[float] # (fg,) float
 
     aux_bool_names: list[str] # names of auxiliary bool targets
-    aux_bool_targets: torch.Tensor # (num_samples, aux_targets) bool
-    aux_pos_weights: torch.Tensor # (aux_targets,) float
+    aux_bool_targets: torch.Tensor | None # (num_samples, aux_targets) bool
+    aux_pos_weights: list[float] | None # (aux_targets,) float
 
     aux_float_names: list[str] # names of float targets
-    aux_float_targets: torch.Tensor # (num_samples, float_targets) float
+    aux_float_targets: torch.Tensor | None # (num_samples, float_targets) float
 
     spectrum_transform: Transform | None # random train transforms only applied to spectra
 
@@ -52,6 +53,8 @@ class MLFlowDataset(Dataset):
         self.aux_float_names = aux_float_names
         
         self.spectrum_transform = spectrum_transform
+
+        self.download()
         
     def load_df(self, df: pd.DataFrame):
         assert "spectrum" in df.columns, "spectrum column not found in dataframe"
@@ -59,44 +62,45 @@ class MLFlowDataset(Dataset):
         self.df = df
 
         # spectra
-        self.spectra = torch.Tensor(df["spectrum"].tolist(), dtype=torch.float32, device=self.cfg.device) # type: ignore
+        self.spectra = torch.tensor(np.stack(df["spectrum"]), dtype=torch.float32, device=self.cfg.device) # type: ignore
 
         # functional groups
         cols = []
         for target in self.fg_names:
             assert target in df.columns, f"{target} column not found in dataframe"
             assert df[target].dtype == bool, f"{target} column is not bool"
-            col = torch.tensor(df[target].tolist(), dtype=torch.bool, device=self.cfg.device) # type: ignore
+            col = torch.tensor(df[target], dtype=torch.bool, device=self.cfg.device) # type: ignore
             cols.append(col)
 
         self.fg_targets = torch.stack(cols, dim=1)
 
         fg_pos_counts = self.fg_targets.sum(dim=0).tolist()
-        fg_pos_weights = self._compute_pos_weights(fg_pos_counts)
-        self.fg_pos_weights = torch.tensor(fg_pos_weights, dtype=torch.float32, device=self.cfg.device) # type: ignore
+        self.fg_pos_weights = self._compute_pos_weights(fg_pos_counts)
 
         # auxiliary bool
+        self.aux_pos_weights = None
+        self.aux_bool_targets = None
         if len(self.aux_bool_names) > 0:
             cols = []
             for target in self.aux_bool_names:
                 assert target in df.columns, f"{target} column not found in dataframe"
                 assert df[target].dtype == bool, f"{target} column is not bool"
-                col = torch.tensor(df[target].tolist(), dtype=torch.bool, device=self.cfg.device) # type: ignore
+                col = torch.tensor(df[target], dtype=torch.bool, device=self.cfg.device) # type: ignore
                 cols.append(col)
 
             self.aux_bool_targets = torch.stack(cols, dim=1)
 
             aux_bool_pos_counts = self.aux_bool_targets.sum(dim=0).tolist()
-            aux_bool_pos_weights = self._compute_pos_weights(aux_bool_pos_counts)
-            self.aux_pos_weights = torch.tensor(aux_bool_pos_weights, dtype=torch.float32, device=self.cfg.device) # type: ignore
+            self.aux_pos_weights = self._compute_pos_weights(aux_bool_pos_counts)
 
         # auxiliary float
+        self.aux_float_targets = None
         if len(self.aux_float_names) > 0:
             cols = []
             for target in self.aux_float_names:
                 assert target in df.columns, f"{target} column not found in dataframe"
                 assert df[target].dtype == float, f"{target} column is not float"
-                col = torch.tensor(df[target].tolist(), dtype=torch.float32, device=self.cfg.device)
+                col = torch.tensor(df[target], dtype=torch.float32, device=self.cfg.device)
                 cols.append(col)
 
             self.aux_float_targets = torch.stack(cols, dim=1)
@@ -135,8 +139,12 @@ class MLFlowDataset(Dataset):
         Move the dataset to the specified device.
         :param device: Device to move the dataset to
         """
-        self.sprctra = self.spectra.to(device)
-        self.targets = {name: target.to(device) for name, target in self.targets.items()}       
+        self.spectra = self.spectra.to(device)
+        self.fg_targets = self.fg_targets.to(device)
+        if self.aux_bool_targets is not None:
+            self.aux_bool_targets = self.aux_bool_targets.to(device)
+        if self.aux_float_targets is not None:
+            self.aux_float_targets = self.aux_float_targets.to(device)
 
         return self
 
@@ -164,10 +172,12 @@ class MLFlowDataset(Dataset):
         out["fg_targets"] = self.fg_targets[index]
 
         if len(self.aux_bool_names) > 0:
-            out["aux_bool_targets"] = self.aux_bool_targets[index]
+            assert self.aux_bool_targets is not None, "aux_bool_targets is None, but aux_bool_names is not empty"
+            out["aux_bool_targets"] = self.aux_bool_targets[index] 
 
         if len(self.aux_float_names) > 0:
-            out["aux_float_targets"] = self.aux_float_targets[index]
+            assert self.aux_float_targets is not None, "aux_float_targets is None, but aux_float_names is not empty"
+            out["aux_float_targets"] = self.aux_float_targets[index] 
 
         return out
 

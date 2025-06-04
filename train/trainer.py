@@ -86,12 +86,12 @@ class Trainer:
         fg_predictions = torch.zeros_like(self.val_dataset.fg_targets, device=self.cfg.device)
         
         # Initialize aux prediction tensors only if they exist
-        if hasattr(self.val_dataset, 'aux_bool_targets') and self.val_dataset.aux_bool_targets.shape[1] > 0:
+        if self.val_dataset.aux_bool_targets is not None:
             aux_bool_predictions = torch.zeros_like(self.val_dataset.aux_bool_targets, device=self.cfg.device)
         else:
             aux_bool_predictions = None
             
-        if hasattr(self.val_dataset, 'aux_float_targets') and self.val_dataset.aux_float_targets.shape[1] > 0:
+        if self.val_dataset.aux_float_targets is not None:
             aux_float_predictions = torch.zeros_like(self.val_dataset.aux_float_targets, device=self.cfg.device)
         else:
             aux_float_predictions = None
@@ -187,7 +187,7 @@ class Trainer:
         
         # Calculate and log auxiliary boolean metrics if they exist
         if aux_bool_predictions is not None and hasattr(self.val_dataset, 'aux_bool_targets'):
-            aux_bool_metrics = compute_metrics(aux_bool_predictions, self.val_dataset.aux_bool_targets)
+            aux_bool_metrics = compute_metrics(aux_bool_predictions, self.val_dataset.aux_bool_targets) # type: ignore
             
             mlflow_metrics.update({
                 "val/aux_bool/accuracy": aux_bool_metrics["overall_accuracy"],
@@ -208,10 +208,10 @@ class Trainer:
         # Calculate and log auxiliary float metrics if they exist
         if aux_float_predictions is not None and hasattr(self.val_dataset, 'aux_float_targets'):
             # Calculate MSE for each target
-            mse_per_target = torch.mean((aux_float_predictions - self.val_dataset.aux_float_targets) ** 2, dim=0)
+            mse_per_target = torch.mean((aux_float_predictions - self.val_dataset.aux_float_targets) ** 2, dim=0) # type: ignore
             
             # Calculate MAE for each target
-            mae_per_target = torch.mean(torch.abs(aux_float_predictions - self.val_dataset.aux_float_targets), dim=0)
+            mae_per_target = torch.mean(torch.abs(aux_float_predictions - self.val_dataset.aux_float_targets), dim=0) # type: ignore
             
             # Calculate overall MSE and MAE
             overall_mse = torch.mean(mse_per_target)

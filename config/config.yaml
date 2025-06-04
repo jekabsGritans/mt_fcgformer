@@ -11,8 +11,9 @@ hydra:
   output_subdir: null
 
 # The MLFlow run id of the dataset
-dataset_id: 7bb299184c1941ec90459eb11f1409eb
-fg_names: []
+dataset_id: 9c694f4d281140e697069431694c06b4 # FTIR_original
+dataset_name: FTIR_original
+fg_names: [alkane, methyl, alkene, alkyne, alcohols, amines, nitriles, aromatics, alkyl halides, esters, ketones, aldehydes, carboxylic acids, ether, acyl halides, amides, nitro]
 aux_bool_names: []
 aux_float_names: []
 
@@ -94,6 +95,3 @@ train_transforms:
 
     - _target_: utils.transforms.Resizer
       signal_size: 1024
-
-# these are autofilled
-target_names: null

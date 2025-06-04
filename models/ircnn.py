@@ -23,19 +23,15 @@ from utils.transforms import Compose
 
 class IrCNNModule(NeuralNetworkModule):
     """Neural network architecture for IrCNN"""
-    
-    def __init__(self, input_dim: int, output_dim: int, kernel_size: int, dropout_p: float, pos_weights: list[float] | None = None):
+    def __init__(self, spectrum_dim: int, fg_target_dim: int, aux_bool_target_dim: int, aux_float_target_dim: int,
+                 kernel_size: int, dropout_p: float = 0.0,
+                 fg_pos_weights: list[float] | None = None, aux_pos_weights: list[float] | None = None,
+                 fg_loss_weight: float = 1.0, aux_bool_loss_weight: float = 0.5, aux_float_loss_weight: float = 0.1):
         """
         Initialize IrCNN neural network.
-        
-        Args:
-            input_dim: Input dimension (number of features)
-            output_dim: Output dimension (number of classes)
-            kernel_size: Kernel size for the convolutional layers (hyperparameter)
-            dropout_p: Dropout probability (hyperparameter)
-            pos_weights: Positive weights for BCE loss
         """
-        super().__init__(input_dim, output_dim, pos_weights)
+        super().__init__(spectrum_dim, fg_target_dim, aux_bool_target_dim, aux_float_target_dim, fg_pos_weights, aux_pos_weights, 
+                         fg_loss_weight, aux_bool_loss_weight, aux_float_loss_weight)
         
         in_ch = 1  # this is fixed for our repository
 
@@ -46,7 +42,7 @@ class IrCNNModule(NeuralNetworkModule):
             nn.ReLU(),
             nn.MaxPool1d(kernel_size=2, stride=2)
         )
-        self.cnn1_size = int(((input_dim - kernel_size + 1 - 2) / 2) + 1)
+        self.cnn1_size = int(((spectrum_dim - kernel_size + 1 - 2) / 2) + 1)
         
         # 2nd CNN layer
         self.CNN2 = nn.Sequential(
@@ -74,10 +70,31 @@ class IrCNNModule(NeuralNetworkModule):
             nn.Dropout(p=dropout_p)
         )
         # FCN layer
-        self.FCN = nn.Linear(in_features=1574, out_features=output_dim)
+        self.FCN = nn.Linear(in_features=1574, out_features=fg_target_dim + aux_bool_target_dim + aux_float_target_dim)
+    
 
-    def forward(self, signal):
-        x = signal.unsqueeze(dim=1)
+    def _split_output(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
+        """
+        Split the output tensor into functional group and auxiliary outputs.
+        """
+
+        out = {}
+
+        fg_logits = x[:, :self.fg_target_dim]
+        out["fg_logits"] = fg_logits
+        
+        if self.aux_bool_target_dim > 0:
+            aux_bool_logits = x[:, self.fg_target_dim:self.fg_target_dim + self.aux_bool_target_dim]
+            out["aux_bool_logits"] = aux_bool_logits
+        
+        if self.aux_float_target_dim > 0:
+            aux_float_preds = x[:, self.fg_target_dim + self.aux_bool_target_dim:]
+            out["aux_float_preds"] = aux_float_preds
+
+        return out
+
+    def forward(self, spectrum):
+        x = spectrum.unsqueeze(dim=1)
         x = self.CNN1(x)
         x = self.CNN2(x)
         x = torch.flatten(x, -2, -1)
@@ -87,19 +104,26 @@ class IrCNNModule(NeuralNetworkModule):
         x = self.DENSE3(x)
         x = self.FCN(x)
         x = torch.squeeze(x, dim=1)
-        return x
+
+        out = self._split_output(x)
+        return out
 
 
 class IrCNN(BaseModel):
 
     def init_from_config(self, cfg: DictConfig):
 
+        self.fg_names = cfg.fg_names
+
         self.spectrum_eval_transform = Compose.from_hydra(cfg.eval_transforms)
 
         # Initialize the network
-        self.nn = IrCNNModule(cfg.model.input_dim, cfg.model.output_dim, cfg.model.kernel_size, cfg.model.dropout_p)
-        self.target_names = cfg.target_names
-        
+        self.nn = IrCNNModule(cfg.model.spectrum_dim,
+                              cfg.model.fg_target_dim,
+                              cfg.model.aux_bool_target_dim,
+                              cfg.model.aux_float_target_dim,
+                              kernel_size=cfg.model.kernel_size)
+
         # Input is only spectrum.
         input_schema = Schema([
             ColSpec(Array(DataType.double), name="spectrum_x"),
@@ -114,8 +138,8 @@ class IrCNN(BaseModel):
         ## Known targets 
         ## None by default == could be true or false, so don't fix
         known_targets = [
-            ParamSpec(name=target, dtype=DataType.boolean, default=None) for target in cfg.target_names
-        ] if cfg.target_names else []
+            ParamSpec(name=target, dtype=DataType.boolean, default=None) for target in cfg.fg_names
+        ] 
 
         ## Also bool. False by default, e.g. "hydrogen_bonding"
         flags = []
@@ -151,7 +175,7 @@ class IrCNN(BaseModel):
         ## Parameters:
         - threshold: float, default=0.5. Above this threshold, the target is considered positive.
         for each target:
-            - target_name: bool, default=None. If set, the prediction for this target is fixed.
+            - fg_name: bool, default=None. If set, the prediction for this functional group is fixed.
 
         ## Output:
         - positive_targets: list of strings, names of the targets predicted to be positive.
@@ -162,7 +186,7 @@ class IrCNN(BaseModel):
     def predict(self, context, model_input: pd.DataFrame, params: dict | None = None) -> list[dict]:
         """ Make predictions with the model. """
 
-        assert self.target_names is not None, "Target names not set."
+        assert self.fg_names, "Functional group names must be set before prediction."
 
         threshold = params.get("threshold", 0.5) if params else 0.5
         results = []
@@ -185,18 +209,18 @@ class IrCNN(BaseModel):
             spectrum = spectrum.unsqueeze(0)
 
             # forward pass
-            logits = self.nn.forward(spectrum)
+            logits = self.nn.forward(spectrum)["fg_logits"]
             probabilities = torch.sigmoid(logits).squeeze(0).tolist()
 
             # apply known targets
             if params is not None:
-                for target in self.target_names:
+                for target in self.fg_names:
                     if target in params:
                         if params[target] is not None:
-                            probabilities[self.target_names.index(target)] = 1.0 if params[target] else 0.0
+                            probabilities[self.fg_names.index(target)] = 1.0 if params[target] else 0.0
 
             out_probs, out_targets = [], []
-            for prob, target in zip(probabilities, self.target_names):
+            for prob, target in zip(probabilities, self.fg_names):
                 if prob > threshold:
                     out_probs.append(prob)
                     out_targets.append(target)

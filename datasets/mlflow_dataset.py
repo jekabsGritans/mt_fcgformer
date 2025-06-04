@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import os
-from re import A
 from typing import Callable
 
-import numpy as np
 import pandas as pd
 import torch
-from matplotlib.pylab import float_
 from omegaconf import DictConfig
 from torch.utils.data import Dataset
 
@@ -15,27 +11,6 @@ from utils.mlflow_utils import download_artifact
 
 # our transforms are just user defined functions
 Transform = Callable[[torch.Tensor], torch.Tensor]
-
-"""
-df
-
-Required:
-    spectrum: float array (already interpolated not XY). 
-    wavenumber_interval: (min, max) in cm^-1
-
-Functional groups by name (just give in example, not enforced)
-    fg_name: bool
-
-additional targets:
-    target: bool or float (int num donors as just float)
-
-if doing augmentations for synthetic samples, 
-    augmented: bool # to not use for validation/test
-
-dataset split performed at object init, with a local seed so that the same for test/valid.
-"""
-
-#TODO: save head as txt to mlflow. and description of relevant columns. prolly no params
 
 class MLFlowDataset(Dataset):
     """
@@ -63,20 +38,20 @@ class MLFlowDataset(Dataset):
     dataset_id: str
     split: str
 
-    def __init__(self, cfg: DictConfig, dataset_id: str, split: str, transform: Transform | None = None):
-        """
-        Initialize the dataset.
-        Args:
-            cfg (DictConfig): Configuration object.
-            dataset_id (str): MLFlow run ID of the dataset to download.
-            split (str): Split of the dataset to download (train, valid, test).
-            transform (Transform | None): Transform to apply to the inputs.
-        """
+    def __init__(self, cfg: DictConfig, dataset_id: str, split: str,
+                 fg_names: list[str], aux_bool_names: list[str], aux_float_names: list[str],
+                 spectrum_transform: Transform | None = None):
         super().__init__()
         self.cfg = cfg
         self.dataset_id = dataset_id
-        self.transform = transform
         self.split = split
+
+        assert len(fg_names) > 0, "fg_names must not be empty"
+        self.fg_names = fg_names
+        self.aux_bool_names = aux_bool_names
+        self.aux_float_names = aux_float_names
+        
+        self.spectrum_transform = spectrum_transform
         
     def load_df(self, df: pd.DataFrame):
         assert "spectrum" in df.columns, "spectrum column not found in dataframe"
@@ -101,28 +76,30 @@ class MLFlowDataset(Dataset):
         self.fg_pos_weights = torch.tensor(fg_pos_weights, dtype=torch.float32, device=self.cfg.device) # type: ignore
 
         # auxiliary bool
-        cols = []
-        for target in self.aux_bool_names:
-            assert target in df.columns, f"{target} column not found in dataframe"
-            assert df[target].dtype == bool, f"{target} column is not bool"
-            col = torch.tensor(df[target].tolist(), dtype=torch.bool, device=self.cfg.device) # type: ignore
-            cols.append(col)
+        if len(self.aux_bool_names) > 0:
+            cols = []
+            for target in self.aux_bool_names:
+                assert target in df.columns, f"{target} column not found in dataframe"
+                assert df[target].dtype == bool, f"{target} column is not bool"
+                col = torch.tensor(df[target].tolist(), dtype=torch.bool, device=self.cfg.device) # type: ignore
+                cols.append(col)
 
-        self.aux_bool_targets = torch.stack(cols, dim=1)
+            self.aux_bool_targets = torch.stack(cols, dim=1)
 
-        aux_bool_pos_counts = self.aux_bool_targets.sum(dim=0).tolist()
-        aux_bool_pos_weights = self._compute_pos_weights(aux_bool_pos_counts)
-        self.aux_pos_weights = torch.tensor(aux_bool_pos_weights, dtype=torch.float32, device=self.cfg.device) # type: ignore
+            aux_bool_pos_counts = self.aux_bool_targets.sum(dim=0).tolist()
+            aux_bool_pos_weights = self._compute_pos_weights(aux_bool_pos_counts)
+            self.aux_pos_weights = torch.tensor(aux_bool_pos_weights, dtype=torch.float32, device=self.cfg.device) # type: ignore
 
         # auxiliary float
-        cols = []
-        for target in self.aux_float_names:
-            assert target in df.columns, f"{target} column not found in dataframe"
-            assert df[target].dtype == float, f"{target} column is not float"
-            col = torch.tensor(df[target].tolist(), dtype=torch.float32, device=self.cfg.device)
-            cols.append(col)
+        if len(self.aux_float_names) > 0:
+            cols = []
+            for target in self.aux_float_names:
+                assert target in df.columns, f"{target} column not found in dataframe"
+                assert df[target].dtype == float, f"{target} column is not float"
+                col = torch.tensor(df[target].tolist(), dtype=torch.float32, device=self.cfg.device)
+                cols.append(col)
 
-        self.aux_float_targets = torch.stack(cols, dim=1)
+            self.aux_float_targets = torch.stack(cols, dim=1)
 
     def download(self):
         df_path = download_artifact(self.cfg, self.dataset_id, f"{self.split}_df.pkl")
@@ -185,8 +162,12 @@ class MLFlowDataset(Dataset):
 
         out["spectrum"] = spectrum # this is pre-interpolated
         out["fg_targets"] = self.fg_targets[index]
-        out["aux_bool_targets"] = self.aux_bool_targets[index]
-        out["aux_float_targets"] = self.aux_float_targets[index]
+
+        if len(self.aux_bool_names) > 0:
+            out["aux_bool_targets"] = self.aux_bool_targets[index]
+
+        if len(self.aux_float_names) > 0:
+            out["aux_float_targets"] = self.aux_float_targets[index]
 
         return out
 

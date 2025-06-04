@@ -45,17 +45,17 @@ def main(cfg: DictConfig):
         mlflow.set_tag("dataset", dataset_name)
 
         if cfg.mode == "train":
-            train_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset, split="train", transform=train_transforms)
-            val_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset, split="valid", transform=eval_transforms)
+            train_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset_id, split="train", fg_names=cfg.fg_names, aux_bool_names=cfg.aux_bool_names, aux_float_names=cfg.aux_float_names, spectrum_transform=train_transforms)
+            val_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset_id, split="valid", fg_names=cfg.fg_names, aux_bool_names=cfg.aux_bool_names, aux_float_names=cfg.aux_float_names, spectrum_transform=eval_transforms)
 
             # pos weights only relevant for training
-            nn.set_pos_weights(train_dataset.pos_weights)
+            nn.setup_loss(fg_pos_weights=train_dataset.fg_pos_weights, aux_pos_weights=train_dataset.aux_pos_weights)
 
             trainer = Trainer(nn=nn, train_dataset=train_dataset, val_dataset=val_dataset, cfg=cfg)
             trainer.train()
 
         elif cfg.mode == "test":
-            test_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset, split="test", transform=eval_transforms)
+            test_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset_id, split="test", fg_names=cfg.fg_names, aux_bool_names=cfg.aux_bool_names, aux_float_names=cfg.aux_float_names, spectrum_transform=eval_transforms)
             tester = Tester(nn=nn, test_dataset=test_dataset, cfg=cfg)
             tester.test()
 

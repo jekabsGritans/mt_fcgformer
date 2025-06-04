@@ -11,7 +11,10 @@ hydra:
   output_subdir: null
 
 # The MLFlow run id of the dataset
-dataset: 7bb299184c1941ec90459eb11f1409eb
+dataset_id: 7bb299184c1941ec90459eb11f1409eb
+fg_names: []
+aux_bool_names: []
+aux_float_names: []
 
 trainer:
   lr: 1e-3

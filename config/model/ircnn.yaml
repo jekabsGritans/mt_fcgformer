@@ -10,9 +10,6 @@ input_dim: 1024
 output_dim: 17
 
 spectrum_dim: 1024
-fg_target_dim: 17
-aux_bool_target_dim: 0
-aux_float_target_dim: 0
 
 kernel_size: 11
 dropout_p: 0.48599073736368

@@ -119,9 +119,9 @@ class IrCNN(BaseModel):
 
         # Initialize the network
         self.nn = IrCNNModule(cfg.model.spectrum_dim,
-                              cfg.model.fg_target_dim,
-                              cfg.model.aux_bool_target_dim,
-                              cfg.model.aux_float_target_dim,
+                              fg_target_dim = len(cfg.fg_names),
+                              aux_bool_target_dim = len(cfg.aux_bool_names),
+                              aux_float_target_dim = len(cfg.aux_float_names),
                               kernel_size=cfg.model.kernel_size)
 
         # Input is only spectrum.

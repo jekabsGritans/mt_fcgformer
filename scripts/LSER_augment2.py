@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from jcamp import jcamp_readfile
 from scipy.interpolate import UnivariateSpline, interp1d
 from scipy.signal import find_peaks, peak_widths
 
@@ -73,7 +72,7 @@ def debug_find_peaks_in_range(spectrum, wavenumbers, wn_start, wn_end, min_promi
     right_bound = min(len(spectrum) - 1, int(np.round(right_ips[0])))
     width = abs(wavenumbers[left_bound] - wavenumbers[right_bound])
 
-    print(f"✅ Found peak at {peak_wn:.1f} cm⁻¹ (T={peak_intensity:.3f}), width ≈ {width:.1f} cm⁻¹")
+    # print(f"✅ Found peak at {peak_wn:.1f} cm⁻¹ (T={peak_intensity:.3f}), width ≈ {width:.1f} cm⁻¹")
 
     return [{
         'peak_idx': global_peak_idx,
@@ -89,7 +88,7 @@ from scipy.ndimage import gaussian_filter1d
 
 
 def debug_apply_lser_shifts(spectrum, wavenumbers, functional_groups, pi_star,beta,alpha):
-    print(f"\n🧪 DEBUG: Applying LSER shifts with π* = {pi_star}")
+    # print(f"\n🧪 DEBUG: Applying LSER shifts with π* = {pi_star}")
     
     lser_sensitivity = {
         'alcohols': -60.3,
@@ -169,8 +168,8 @@ def debug_apply_lser_shifts(spectrum, wavenumbers, functional_groups, pi_star,be
         if abs(frequency_shift) < 1.0:
             continue
 
-        print(f"\n📍 Functional group: {group_name}")
-        print(f"   Shift: {frequency_shift:.1f} cm⁻¹")
+        # print(f"\n📍 Functional group: {group_name}")
+        # print(f"   Shift: {frequency_shift:.1f} cm⁻¹")
 
         for wn_start, wn_end in functional_group_ranges.get(group_name, []):
             peaks = debug_find_peaks_in_range(shifted_spectrum, wavenumbers, wn_start, wn_end)
@@ -192,8 +191,8 @@ def debug_apply_lser_shifts(spectrum, wavenumbers, functional_groups, pi_star,be
             search_lb = max(0, peak_idx - initial_pad)
             search_rb = min(len(spectrum) - 1, peak_idx + initial_pad)
             
-            print(f"   🔍 Peak at index {peak_idx} ({current_wn:.1f} cm⁻¹)")
-            print(f"   🔍 Initial search zone: indices {search_lb}-{search_rb}")
+            # print(f"   🔍 Peak at index {peak_idx} ({current_wn:.1f} cm⁻¹)")
+            # print(f"   🔍 Initial search zone: indices {search_lb}-{search_rb}")
             
             # Find left boundary: search leftward from peak for baseline
             left_bound = peak_idx
@@ -242,7 +241,7 @@ def debug_apply_lser_shifts(spectrum, wavenumbers, functional_groups, pi_star,be
                 temp_spectrum[target_indices] = interp(wavenumbers[target_indices])
                 total_peaks_shifted += 1
 
-                print(f"   🔄 Shifted {peak_info['type']} peak region {wavenumbers[left_bound]:.1f}-{wavenumbers[right_bound]:.1f} → {new_peak_wn:.1f} cm⁻¹")
+                # print(f"   🔄 Shifted {peak_info['type']} peak region {wavenumbers[left_bound]:.1f}-{wavenumbers[right_bound]:.1f} → {new_peak_wn:.1f} cm⁻¹")
 
     # Final smoothing
     shifted_spectrum = gaussian_filter1d(temp_spectrum, sigma=1)

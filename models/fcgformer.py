@@ -27,7 +27,7 @@ class MultiHeadAttention(nn.Module):
             embed_dim: dimension of embedding vector output
             n_heads: number of self attention heads
         """
-        super(MultiHeadAttention, self).__init__()
+        super().__init__()
 
         self.embed_dim = embed_dim  # 512 dim
         self.n_heads = n_heads  # 8
@@ -107,11 +107,11 @@ class TransformerBlock(nn.Module):
 
 
 class PatchEmbed(nn.Module):
-    def __init__(self, signal_size, patch_size, in_chans=1, embed_dim=768):
+    def __init__(self, spectrum_dim, patch_size, in_chans=1, embed_dim=768):
         super(PatchEmbed, self).__init__()
-        self.signal_size = signal_size
+        self.spectrum_dim = spectrum_dim
         self.patch_size = patch_size
-        self.n_patches = (signal_size // patch_size)
+        self.n_patches = (spectrum_dim // patch_size)
 
         self.proj = nn.Conv1d(
             in_channels=in_chans,
@@ -128,18 +128,21 @@ class PatchEmbed(nn.Module):
 
 class FCGFormerModule(NeuralNetworkModule):
     """Neural network architecture for FCGFormer"""
-    
-    def __init__(self, signal_size, patch_size, embed_dim, num_layers, expansion_factor, n_heads, p_dropout, num_classes):
-        super(FCGFormerModule, self).__init__()
+
+
+    def __init__(self, spectrum_dim: int, fg_target_dim: int, aux_bool_target_dim: int, aux_float_target_dim: int,
+                 patch_size: int, embed_dim: int, num_layers: int, expansion_factor: int, n_heads: int, dropout_p: float):
+        
+        super().__init__(spectrum_dim, fg_target_dim, aux_bool_target_dim, aux_float_target_dim)
         
         self.patch_embed = PatchEmbed(
-            signal_size=signal_size,
+            spectrum_dim=spectrum_dim,
             patch_size=patch_size,
             embed_dim=embed_dim,
         )
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.pos_embed = nn.Parameter(torch.zeros(1, 1 + self.patch_embed.n_patches, embed_dim))
-        self.pos_drop = nn.Dropout(p=p_dropout)
+        self.pos_drop = nn.Dropout(p=dropout_p)
 
         self.layers = nn.ModuleList([
             TransformerBlock(embed_dim, expansion_factor, n_heads)
@@ -147,7 +150,11 @@ class FCGFormerModule(NeuralNetworkModule):
         ])
 
         self.norm = nn.LayerNorm(embed_dim, eps=1e-6)
-        self.head = nn.Linear(embed_dim, num_classes)
+
+        # TODO: aux
+        assert aux_bool_target_dim == 0, "aux bool targets not implemented yet"
+        assert aux_float_target_dim == 0, "aux float targets not implemented yet"
+        self.head = nn.Linear(embed_dim, fg_target_dim)
         
     def forward(self, x):
         n_samples = x.shape[0]
@@ -187,14 +194,16 @@ class FCGFormer(BaseModel):
 
         # Initialize the network
         self.nn = FCGFormerModule(
-            signal_size=cfg.model.signal_size,
+            spectrum_dim=cfg.model.spectrum_dim,
+            fg_target_dim=len(cfg.fg_names),
+            aux_bool_target_dim=len(cfg.aux_bool_names),
+            aux_float_target_dim=len(cfg.aux_float_names),
             patch_size=cfg.model.patch_size,
             embed_dim=cfg.model.embed_dim,
             num_layers=cfg.model.num_layers,
             expansion_factor=cfg.model.expansion_factor,
             n_heads=cfg.model.n_heads,
-            p_dropout=cfg.model.p_dropout,
-            num_classes=len(cfg.fg_names)
+            dropout_p=cfg.model.dropout_p
         )
 
         assert len(cfg.aux_bool_names) == 0, "aux bool not implemented yet"
@@ -245,7 +254,7 @@ class FCGFormer(BaseModel):
 
         self._description = f"""
         ## Input:
-        - 1D array of shape (-1, {cfg.model.signal_size}) representing the IR spectrum. For a single spectrum, use shape (1, {cfg.model.signal_size}).
+        - 1D array of shape (-1, {cfg.model.spectrum_dim}) representing the IR spectrum. For a single spectrum, use shape (1, {cfg.model.spectrum_dim}).
 
         ## Parameters:
         - threshold: float, default=0.5. Above this threshold, the target is considered positive.

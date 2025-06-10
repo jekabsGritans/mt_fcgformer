@@ -24,14 +24,11 @@ from utils.transforms import Compose
 class IrCNNModule(NeuralNetworkModule):
     """Neural network architecture for IrCNN"""
     def __init__(self, spectrum_dim: int, fg_target_dim: int, aux_bool_target_dim: int, aux_float_target_dim: int,
-                 kernel_size: int, dropout_p: float = 0.0,
-                 fg_pos_weights: list[float] | None = None, aux_pos_weights: list[float] | None = None,
-                 fg_loss_weight: float = 1.0, aux_bool_loss_weight: float = 0.5, aux_float_loss_weight: float = 0.1):
+                 kernel_size: int, dropout_p: float = 0.0):
         """
         Initialize IrCNN neural network.
         """
-        super().__init__(spectrum_dim, fg_target_dim, aux_bool_target_dim, aux_float_target_dim, fg_pos_weights, aux_pos_weights, 
-                         fg_loss_weight, aux_bool_loss_weight, aux_float_loss_weight)
+        super().__init__(spectrum_dim, fg_target_dim, aux_bool_target_dim, aux_float_target_dim)
         
         in_ch = 1  # this is fixed for our repository
 
@@ -122,7 +119,8 @@ class IrCNN(BaseModel):
                               fg_target_dim = len(cfg.fg_names),
                               aux_bool_target_dim = len(cfg.aux_bool_names),
                               aux_float_target_dim = len(cfg.aux_float_names),
-                              kernel_size=cfg.model.kernel_size)
+                              kernel_size=cfg.model.kernel_size,
+                              dropout_p=cfg.model.dropout_p)
 
         # Input is only spectrum.
         input_schema = Schema([
@@ -170,7 +168,7 @@ class IrCNN(BaseModel):
 
         self._description = f"""
         ## Input:
-        -  1D array of shape (-1, {cfg.model.input_dim}) representing the IR spectrum. For a single spectrum, use shape (1, {cfg.model.input_dim}).
+        -  1D array of shape (-1, {cfg.model.spectrum_dim}) representing the IR spectrum. For a single spectrum, use shape (1, {cfg.model.spectrum_dim}).
 
         ## Parameters:
         - threshold: float, default=0.5. Above this threshold, the target is considered positive.

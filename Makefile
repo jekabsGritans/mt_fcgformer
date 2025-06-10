@@ -1,8 +1,9 @@
 # Makefile
 
 # Image names
-BASE_IMAGE  := base-image:latest
-TRAIN_IMAGE := train-image:latest
+DOCKERHUB_USER := your-dockerhub-username  # ← Add this line
+BASE_IMAGE  := ${DOCKERHUB_USER}/base-image:latest
+TRAIN_IMAGE := ${DOCKERHUB_USER}/train-image:latest
 DEV_IMAGE   := dev-image:latest
 
 # Default target

@@ -9,5 +9,15 @@ WORKDIR /workspace
 # Bake in the full source for training
 COPY . .
 
+COPY config/ ./config/
+COPY models/ ./models/
+COPY datasets/ ./datasets/
+COPY train/ ./train/
+COPY utils/ ./utils/
+COPY eval/ ./eval/
+COPY deploy/ ./deploy/
+COPY main.py ./
+
+
 # Default entrypoint
 ENTRYPOINT ["python3", "main.py"]

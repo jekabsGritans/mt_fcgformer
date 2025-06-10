@@ -121,6 +121,7 @@ class PatchEmbed(nn.Module):
         )
 
     def forward(self, x):
+        x = x.unsqueeze(1)  # (batch_size, in_chans, spectrum_dim)
         x = self.proj(x)
         x = x.transpose(1, 2)  # (batch_size, n_patches, embed_dim)
         return x
@@ -175,8 +176,9 @@ class FCGFormerModule(NeuralNetworkModule):
 
         cls_token_final = embed_out[:, 0]  # just CLS token
         logits = self.head(cls_token_final)
-        
-        return logits
+
+        out = {"fg_logits": logits}
+        return out
         
     def get_attention_maps(self):
         """Returns attention maps for visualization"""
@@ -291,7 +293,7 @@ class FCGFormer(BaseModel):
             spectrum = spectrum.unsqueeze(0)
 
             # Forward pass
-            logits = self.nn(spectrum)
+            logits = self.nn(spectrum)["fg_logits"]
             probabilities = torch.sigmoid(logits).squeeze(0).tolist()
 
             # Get attention maps

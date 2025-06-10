@@ -42,7 +42,9 @@
                 "experiment_name=train_rdk_chem",
                 "dataset_id=ad3a341068064582b108d4af626e4574",
                 "aux_bool_names=['h bonds', 'conjugation']",
-                "aux_float_names=['h donors', 'h acceptors', 'Topological Surface Area']"
+                "aux_float_names=['h donors', 'h acceptors', 'Topological Surface Area']",
+                "model.aux_bool_target_dim=2",
+                "model.aux_float_target_dim=3"
             ]
         },
         {

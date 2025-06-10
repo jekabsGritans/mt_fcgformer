@@ -17,7 +17,7 @@ class NeuralNetworkModule(nn.Module, ABC):
     
     def __init__(self, spectrum_dim: int, fg_target_dim: int, aux_bool_target_dim: int, aux_float_target_dim: int,
                  fg_pos_weights: list[float] | None = None, aux_pos_weights: list[float] | None = None,
-                 fg_loss_weight: float = 1.0, aux_bool_loss_weight: float = 0.5, aux_float_loss_weight: float = 0.1):
+                 fg_loss_weight: float = 1.0, aux_bool_loss_weight: float = 0.5, aux_float_loss_weight: float = 1e-3):
         super().__init__()
         self.spectrum_dim = spectrum_dim
         self.fg_target_dim = fg_target_dim

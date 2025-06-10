@@ -1,7 +1,7 @@
 # Makefile
 
 # Image names
-DOCKERHUB_USER := jekabsgr  # ← Add this line
+DOCKERHUB_USER := jekabsgr
 BASE_IMAGE  := ${DOCKERHUB_USER}/base-image:latest
 TRAIN_IMAGE := ${DOCKERHUB_USER}/train-image:latest
 DEV_IMAGE   := dev-image:latest

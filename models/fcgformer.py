@@ -5,7 +5,6 @@ Original implementation: https://github.com/lycaoduong/FcgFormer, https://huggin
 
 import math
 
-import cv2
 import numpy as np
 import pandas as pd
 import torch
@@ -17,6 +16,7 @@ from mlflow.types.schema import AnyType, Array
 from omegaconf import DictConfig
 
 from models.base_model import BaseModel, NeuralNetworkModule
+from utils.misc import interpolate
 from utils.transforms import Compose
 
 
@@ -269,87 +269,74 @@ class FCGFormer(BaseModel):
 
     def predict(self, context, model_input: pd.DataFrame, params: dict | None = None) -> list[dict]:
         """ Make predictions with the model. """
-        if params is None:
-            params = {}
-            
-        # Extract threshold (default 0.5)
-        threshold = params.get("threshold", 0.5)
-        
-        # Get spectrum data
-        spectrum_x = np.array(model_input["spectrum_x"].tolist())
-        spectrum_y = np.array(model_input["spectrum_y"].tolist())
-        
-        # Apply transformations
-        x_transformed = self.spectrum_eval_transform(spectrum_x, spectrum_y)
-        
-        # Convert to tensor
-        x = torch.tensor(x_transformed[np.newaxis, np.newaxis, :], dtype=torch.float32)
-        
-        # Move tensor to the same device as the model
-        x = x.to(next(self.nn.parameters()).device)
-        
-        # Run inference
-        with torch.no_grad():
-            y_pred = self.nn(x)
-            probabilities = torch.sigmoid(y_pred).cpu().numpy()[0]
-            attention_maps = self.nn.get_attention_maps()
-        
-        # Get the last layer attention map for visualization (first head, cls token)
-        attention = attention_maps[-1][0, 0, 0, 1:].cpu().numpy()  # First batch, first head, cls token row, exclude cls token column
-        
-        # Generate attention visualization data
-        # Assuming spectrum_x contains wavenumbers from 400 to 4000 cm^-1
-        wavenumbers = np.linspace(400, 4000, len(attention))
-        attention_data = [(float(wn), float(att)) for wn, att in zip(wavenumbers, attention)]
-        
-        # Process predictions
+        assert self.fg_names, "Functional group names must be set before prediction."
+
+        threshold = params.get("threshold", 0.5) if params else 0.5
         results = []
-        for i, sample_probs in enumerate([probabilities]):  # For each sample in batch
-            positive_targets = []
-            positive_probabilities = []
+
+        spectra_x = np.stack(model_input["spectrum_x"].to_numpy()) # type: ignore
+        spectra_y = np.stack(model_input["spectrum_y"].to_numpy()) # type: ignore
+
+        self.nn.eval()
+
+        for spectrum_x, spectrum_y in zip(spectra_x, spectra_y):
+            # Interpolate to fixed size
+            spectrum = interpolate(x=spectrum_x, y=spectrum_y, min_x=400, max_x=4000, num_points=3600)
+
+            # Preprocess spectrum
+            spectrum = torch.from_numpy(spectrum).float()
+            spectrum = self.spectrum_eval_transform(spectrum)
             
-            for j, prob in enumerate(sample_probs):
-                target_name = self.fg_names[j]
-                
-                # Check if target is fixed in params
-                if target_name in params and params[target_name] is not None:
-                    if params[target_name]:  # If fixed to True
-                        positive_targets.append(target_name)
-                        positive_probabilities.append(1.0)
-                elif prob >= threshold:
-                    positive_targets.append(target_name)
-                    positive_probabilities.append(float(prob))
+            # Add batch dimension
+            spectrum = spectrum.unsqueeze(0)
+
+            # Forward pass
+            logits = self.nn(spectrum)
+            probabilities = torch.sigmoid(logits).squeeze(0).tolist()
+
+            # Get attention maps
+            attention_maps = self.nn.get_attention_maps()
+            # Take CLS token attention from last layer (shape: batch_size, n_heads, seq_len)
+            last_layer_attention = attention_maps[-1][:, :, 0, 1:].mean(dim=1)  # Average over heads, exclude CLS token
+            # Convert to numpy and get first batch item
+            attention_scores = last_layer_attention[0].cpu().numpy()
+
+            # Apply known targets if specified in params
+            if params is not None:
+                for target in self.fg_names:
+                    if target in params:
+                        if params[target] is not None:
+                            probabilities[self.fg_names.index(target)] = 1.0 if params[target] else 0.0
+
+            # Filter predictions by threshold
+            out_probs = []
+            out_targets = []
+            out_attention = []
             
+            for prob, target in zip(probabilities, self.fg_names):
+                if prob > threshold:
+                    out_probs.append(prob)
+                    out_targets.append(target)
+                    
+                    # Create attention regions for this target
+                    # Convert patch attention to wavenumber regions
+                    patch_size = self.nn.patch_embed.patch_size
+                    num_patches = len(attention_scores)
+                    
+                    # Calculate wavenumber for each patch
+                    wavenumbers_per_patch = []
+                    for i in range(num_patches):
+                        start_wn = 400 + (i * patch_size)
+                        end_wn = start_wn + patch_size
+                        score = float(attention_scores[i])
+                        wavenumbers_per_patch.append((start_wn, end_wn, score))
+                    
+                    out_attention.append(wavenumbers_per_patch)
+
             results.append({
-                "positive_targets": positive_targets,
-                "positive_probabilities": positive_probabilities,
-                "attention": attention_data
+                "positive_targets": out_targets,
+                "positive_probabilities": out_probs,
+                "attention": out_attention
             })
-        
+
         return results
-    
-    def generate_random_non_overlapping_intervals(self, k, min_val, max_val, min_interval_length=1, max_attempts_per_interval=100):
-        """Generate k non-overlapping intervals from [min_val, max_val]"""
-        intervals = []
-        for _ in range(k):
-            attempts = 0
-            while attempts < max_attempts_per_interval:
-                attempts += 1
-                
-                # Generate random interval
-                int_length = random.uniform(min_interval_length, (max_val - min_val) / (k + 1))
-                start = random.uniform(min_val, max_val - int_length)
-                end = start + int_length
-                
-                # Check if this interval overlaps with existing intervals
-                overlaps = False
-                for s, e in intervals:
-                    if start <= e and end >= s:  # Check for overlap
-                        overlaps = True
-                        break
-                
-                if not overlaps:
-                    intervals.append((start, end))
-                    break
-        
-        return intervals

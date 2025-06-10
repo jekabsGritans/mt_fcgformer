@@ -116,10 +116,8 @@ def log_config_params(cfg: DictConfig) -> None:
         cfg (DictConfig): Configuration object from Hydra
     """
     params = _flatten_dict(cfg)
-    
-    # Log each parameter to MLflow
-    for key, value in params.items():
-        mlflow.log_param(key, value)
+    mlflow.log_params(params)   
+
     
 
 def download_artifact(cfg: DictConfig, run_id: str, filename: str) -> str:

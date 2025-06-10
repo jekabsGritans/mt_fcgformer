@@ -15,20 +15,20 @@ from utils.transforms import Transform
 class NeuralNetworkModule(nn.Module, ABC):
     """Base neural network architecture for multilabel classification"""
     
-    def __init__(self, spectrum_dim: int, fg_target_dim: int, aux_bool_target_dim: int, aux_float_target_dim: int,
-                 fg_pos_weights: list[float] | None = None, aux_pos_weights: list[float] | None = None,
-                 fg_loss_weight: float = 1.0, aux_bool_loss_weight: float = 0.5, aux_float_loss_weight: float = 1e-3):
+    def __init__(self, spectrum_dim: int, fg_target_dim: int, aux_bool_target_dim: int, aux_float_target_dim: int):
         super().__init__()
         self.spectrum_dim = spectrum_dim
         self.fg_target_dim = fg_target_dim
         self.aux_bool_target_dim = aux_bool_target_dim
         self.aux_float_target_dim = aux_float_target_dim
-        self.setup_loss(fg_pos_weights, aux_pos_weights)
+        self.setup_loss()
+    
+    def setup_loss(self, fg_pos_weights: list[float] | None = None, aux_pos_weights: list[float] | None = None,
+                   fg_loss_weight: float = 1.0, aux_bool_loss_weight: float = 0.5, aux_float_loss_weight: float = 1e-3):
+        
         self.fg_loss_weight = fg_loss_weight
         self.aux_bool_loss_weight = aux_bool_loss_weight
         self.aux_float_loss_weight = aux_float_loss_weight
-    
-    def setup_loss(self, fg_pos_weights: list[float] | None = None, aux_pos_weights: list[float] | None = None):
 
         # calssification of fg targets
         if fg_pos_weights is None:

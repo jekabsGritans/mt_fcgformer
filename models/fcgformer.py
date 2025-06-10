@@ -5,7 +5,6 @@ Original implementation: https://github.com/lycaoduong/FcgFormer, https://huggin
 
 import math
 
-import cv2
 import numpy as np
 import pandas as pd
 import torch
@@ -17,6 +16,7 @@ from mlflow.types.schema import AnyType, Array
 from omegaconf import DictConfig
 
 from models.base_model import BaseModel, NeuralNetworkModule
+from utils.misc import interpolate
 from utils.transforms import Compose
 
 
@@ -27,7 +27,7 @@ class MultiHeadAttention(nn.Module):
             embed_dim: dimension of embedding vector output
             n_heads: number of self attention heads
         """
-        super(MultiHeadAttention, self).__init__()
+        super().__init__()
 
         self.embed_dim = embed_dim  # 512 dim
         self.n_heads = n_heads  # 8
@@ -107,11 +107,11 @@ class TransformerBlock(nn.Module):
 
 
 class PatchEmbed(nn.Module):
-    def __init__(self, signal_size, patch_size, in_chans=1, embed_dim=768):
+    def __init__(self, spectrum_dim, patch_size, in_chans=1, embed_dim=768):
         super(PatchEmbed, self).__init__()
-        self.signal_size = signal_size
+        self.spectrum_dim = spectrum_dim
         self.patch_size = patch_size
-        self.n_patches = (signal_size // patch_size)
+        self.n_patches = (spectrum_dim // patch_size)
 
         self.proj = nn.Conv1d(
             in_channels=in_chans,
@@ -121,6 +121,7 @@ class PatchEmbed(nn.Module):
         )
 
     def forward(self, x):
+        x = x.unsqueeze(1)  # (batch_size, in_chans, spectrum_dim)
         x = self.proj(x)
         x = x.transpose(1, 2)  # (batch_size, n_patches, embed_dim)
         return x
@@ -128,18 +129,21 @@ class PatchEmbed(nn.Module):
 
 class FCGFormerModule(NeuralNetworkModule):
     """Neural network architecture for FCGFormer"""
-    
-    def __init__(self, signal_size, patch_size, embed_dim, num_layers, expansion_factor, n_heads, p_dropout, num_classes):
-        super(FCGFormerModule, self).__init__()
+
+
+    def __init__(self, spectrum_dim: int, fg_target_dim: int, aux_bool_target_dim: int, aux_float_target_dim: int,
+                 patch_size: int, embed_dim: int, num_layers: int, expansion_factor: int, n_heads: int, dropout_p: float):
+        
+        super().__init__(spectrum_dim, fg_target_dim, aux_bool_target_dim, aux_float_target_dim)
         
         self.patch_embed = PatchEmbed(
-            signal_size=signal_size,
+            spectrum_dim=spectrum_dim,
             patch_size=patch_size,
             embed_dim=embed_dim,
         )
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.pos_embed = nn.Parameter(torch.zeros(1, 1 + self.patch_embed.n_patches, embed_dim))
-        self.pos_drop = nn.Dropout(p=p_dropout)
+        self.pos_drop = nn.Dropout(p=dropout_p)
 
         self.layers = nn.ModuleList([
             TransformerBlock(embed_dim, expansion_factor, n_heads)
@@ -147,7 +151,11 @@ class FCGFormerModule(NeuralNetworkModule):
         ])
 
         self.norm = nn.LayerNorm(embed_dim, eps=1e-6)
-        self.head = nn.Linear(embed_dim, num_classes)
+
+        # TODO: aux
+        assert aux_bool_target_dim == 0, "aux bool targets not implemented yet"
+        assert aux_float_target_dim == 0, "aux float targets not implemented yet"
+        self.head = nn.Linear(embed_dim, fg_target_dim)
         
     def forward(self, x):
         n_samples = x.shape[0]
@@ -168,8 +176,9 @@ class FCGFormerModule(NeuralNetworkModule):
 
         cls_token_final = embed_out[:, 0]  # just CLS token
         logits = self.head(cls_token_final)
-        
-        return logits
+
+        out = {"fg_logits": logits}
+        return out
         
     def get_attention_maps(self):
         """Returns attention maps for visualization"""
@@ -187,14 +196,16 @@ class FCGFormer(BaseModel):
 
         # Initialize the network
         self.nn = FCGFormerModule(
-            signal_size=cfg.model.signal_size,
+            spectrum_dim=cfg.model.spectrum_dim,
+            fg_target_dim=len(cfg.fg_names),
+            aux_bool_target_dim=len(cfg.aux_bool_names),
+            aux_float_target_dim=len(cfg.aux_float_names),
             patch_size=cfg.model.patch_size,
             embed_dim=cfg.model.embed_dim,
             num_layers=cfg.model.num_layers,
             expansion_factor=cfg.model.expansion_factor,
             n_heads=cfg.model.n_heads,
-            p_dropout=cfg.model.p_dropout,
-            num_classes=len(cfg.fg_names)
+            dropout_p=cfg.model.dropout_p
         )
 
         assert len(cfg.aux_bool_names) == 0, "aux bool not implemented yet"
@@ -245,7 +256,7 @@ class FCGFormer(BaseModel):
 
         self._description = f"""
         ## Input:
-        - 1D array of shape (-1, {cfg.model.signal_size}) representing the IR spectrum. For a single spectrum, use shape (1, {cfg.model.signal_size}).
+        - 1D array of shape (-1, {cfg.model.spectrum_dim}) representing the IR spectrum. For a single spectrum, use shape (1, {cfg.model.spectrum_dim}).
 
         ## Parameters:
         - threshold: float, default=0.5. Above this threshold, the target is considered positive.
@@ -260,87 +271,74 @@ class FCGFormer(BaseModel):
 
     def predict(self, context, model_input: pd.DataFrame, params: dict | None = None) -> list[dict]:
         """ Make predictions with the model. """
-        if params is None:
-            params = {}
-            
-        # Extract threshold (default 0.5)
-        threshold = params.get("threshold", 0.5)
-        
-        # Get spectrum data
-        spectrum_x = np.array(model_input["spectrum_x"].tolist())
-        spectrum_y = np.array(model_input["spectrum_y"].tolist())
-        
-        # Apply transformations
-        x_transformed = self.spectrum_eval_transform(spectrum_x, spectrum_y)
-        
-        # Convert to tensor
-        x = torch.tensor(x_transformed[np.newaxis, np.newaxis, :], dtype=torch.float32)
-        
-        # Move tensor to the same device as the model
-        x = x.to(next(self.nn.parameters()).device)
-        
-        # Run inference
-        with torch.no_grad():
-            y_pred = self.nn(x)
-            probabilities = torch.sigmoid(y_pred).cpu().numpy()[0]
-            attention_maps = self.nn.get_attention_maps()
-        
-        # Get the last layer attention map for visualization (first head, cls token)
-        attention = attention_maps[-1][0, 0, 0, 1:].cpu().numpy()  # First batch, first head, cls token row, exclude cls token column
-        
-        # Generate attention visualization data
-        # Assuming spectrum_x contains wavenumbers from 400 to 4000 cm^-1
-        wavenumbers = np.linspace(400, 4000, len(attention))
-        attention_data = [(float(wn), float(att)) for wn, att in zip(wavenumbers, attention)]
-        
-        # Process predictions
+        assert self.fg_names, "Functional group names must be set before prediction."
+
+        threshold = params.get("threshold", 0.5) if params else 0.5
         results = []
-        for i, sample_probs in enumerate([probabilities]):  # For each sample in batch
-            positive_targets = []
-            positive_probabilities = []
+
+        spectra_x = np.stack(model_input["spectrum_x"].to_numpy()) # type: ignore
+        spectra_y = np.stack(model_input["spectrum_y"].to_numpy()) # type: ignore
+
+        self.nn.eval()
+
+        for spectrum_x, spectrum_y in zip(spectra_x, spectra_y):
+            # Interpolate to fixed size
+            spectrum = interpolate(x=spectrum_x, y=spectrum_y, min_x=400, max_x=4000, num_points=3600)
+
+            # Preprocess spectrum
+            spectrum = torch.from_numpy(spectrum).float()
+            spectrum = self.spectrum_eval_transform(spectrum)
             
-            for j, prob in enumerate(sample_probs):
-                target_name = self.fg_names[j]
-                
-                # Check if target is fixed in params
-                if target_name in params and params[target_name] is not None:
-                    if params[target_name]:  # If fixed to True
-                        positive_targets.append(target_name)
-                        positive_probabilities.append(1.0)
-                elif prob >= threshold:
-                    positive_targets.append(target_name)
-                    positive_probabilities.append(float(prob))
+            # Add batch dimension
+            spectrum = spectrum.unsqueeze(0)
+
+            # Forward pass
+            logits = self.nn(spectrum)["fg_logits"]
+            probabilities = torch.sigmoid(logits).squeeze(0).tolist()
+
+            # Get attention maps
+            attention_maps = self.nn.get_attention_maps()
+            # Take CLS token attention from last layer (shape: batch_size, n_heads, seq_len)
+            last_layer_attention = attention_maps[-1][:, :, 0, 1:].mean(dim=1)  # Average over heads, exclude CLS token
+            # Convert to numpy and get first batch item
+            attention_scores = last_layer_attention[0].cpu().numpy()
+
+            # Apply known targets if specified in params
+            if params is not None:
+                for target in self.fg_names:
+                    if target in params:
+                        if params[target] is not None:
+                            probabilities[self.fg_names.index(target)] = 1.0 if params[target] else 0.0
+
+            # Filter predictions by threshold
+            out_probs = []
+            out_targets = []
+            out_attention = []
             
+            for prob, target in zip(probabilities, self.fg_names):
+                if prob > threshold:
+                    out_probs.append(prob)
+                    out_targets.append(target)
+                    
+                    # Create attention regions for this target
+                    # Convert patch attention to wavenumber regions
+                    patch_size = self.nn.patch_embed.patch_size
+                    num_patches = len(attention_scores)
+                    
+                    # Calculate wavenumber for each patch
+                    wavenumbers_per_patch = []
+                    for i in range(num_patches):
+                        start_wn = 400 + (i * patch_size)
+                        end_wn = start_wn + patch_size
+                        score = float(attention_scores[i])
+                        wavenumbers_per_patch.append((start_wn, end_wn, score))
+                    
+                    out_attention.append(wavenumbers_per_patch)
+
             results.append({
-                "positive_targets": positive_targets,
-                "positive_probabilities": positive_probabilities,
-                "attention": attention_data
+                "positive_targets": out_targets,
+                "positive_probabilities": out_probs,
+                "attention": out_attention
             })
-        
+
         return results
-    
-    def generate_random_non_overlapping_intervals(self, k, min_val, max_val, min_interval_length=1, max_attempts_per_interval=100):
-        """Generate k non-overlapping intervals from [min_val, max_val]"""
-        intervals = []
-        for _ in range(k):
-            attempts = 0
-            while attempts < max_attempts_per_interval:
-                attempts += 1
-                
-                # Generate random interval
-                int_length = random.uniform(min_interval_length, (max_val - min_val) / (k + 1))
-                start = random.uniform(min_val, max_val - int_length)
-                end = start + int_length
-                
-                # Check if this interval overlaps with existing intervals
-                overlaps = False
-                for s, e in intervals:
-                    if start <= e and end >= s:  # Check for overlap
-                        overlaps = True
-                        break
-                
-                if not overlaps:
-                    intervals.append((start, end))
-                    break
-        
-        return intervals

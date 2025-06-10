@@ -14,7 +14,8 @@
                 "mode=train",
                 "device=cuda:0",
                 "experiment_name=train_nist",
-                "dataset_id=fb3df43da2284161aee9f043a1a4ab33"
+                "dataset_id=fb3df43da2284161aee9f043a1a4ab33",
+                "model=fcgformer"
             ]
         },
         {
@@ -81,7 +82,7 @@
             "console": "integratedTerminal",
             "args": [
                 "mode=deploy",
-                "checkpoint=b516fc37e5ba44c08d57b7a4cbd7d5e5/best",
+                "checkpoint=ef4750cf02cf452ab356e7585d54f04e/best",
                 "experiment_name=debug"
             ]
         },       

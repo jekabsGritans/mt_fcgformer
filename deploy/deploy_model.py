@@ -28,7 +28,7 @@ def deploy_model_from_config(cfg: DictConfig):
     config_path = download_artifact(cfg, run_id, "config.yaml")
     train_cfg = OmegaConf.load(config_path)
 
-    dataset_id = train_cfg.dataset
+    dataset_id = train_cfg.dataset_id
     dataset_name = get_experiment_name_from_run(dataset_id)
 
     # Model is determined by combination of model name and dataset 
@@ -71,7 +71,7 @@ def deploy_model_from_config(cfg: DictConfig):
         name=model_name,
         version=model_info.version,
         key='dataset_version',
-        value=train_cfg.dataset
+        value=train_cfg.dataset_id
     )
     client.update_model_version(
         name=model_name,

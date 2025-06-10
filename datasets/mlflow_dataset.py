@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import os
 from typing import Callable
 
 import numpy as np
@@ -99,15 +101,28 @@ class MLFlowDataset(Dataset):
             cols = []
             for target in self.aux_float_names:
                 assert target in df.columns, f"{target} column not found in dataframe"
-                assert df[target].dtype == float, f"{target} column is not float"
+                assert df[target].dtype in [float, int], f"{target} column is not float or int"
                 col = torch.tensor(df[target], dtype=torch.float32, device=self.cfg.device)
                 cols.append(col)
 
             self.aux_float_targets = torch.stack(cols, dim=1)
 
     def download(self):
-        df_path = download_artifact(self.cfg, self.dataset_id, f"{self.split}_df.pkl")
-        self.df = pd.read_pickle(df_path)
+        df_path = download_artifact(self.cfg, self.dataset_id, f"{self.split}_df.csv.gz")
+
+        # cache unzipped
+        pkl_path = df_path.replace('.csv.gz', '.pkl')
+        if os.path.exists(pkl_path):
+            print("Loading cached dataset pkl")
+            self.df = pd.read_pickle(pkl_path)
+        else:
+            print("Unzipping dataset...")
+            self.df = pd.read_csv(df_path, compression='gzip')
+            print("Converting spectra...")
+            str_to_arr = lambda st: np.array(ast.literal_eval(st), dtype=np.float32)
+            self.df["spectrum"] = self.df["spectrum"].apply(str_to_arr) # type: ignore
+            self.df.to_pickle(pkl_path) 
+
         self.load_df(self.df)
 
     def _compute_pos_weights(self, pos_counts: list[int]) -> list[float]:

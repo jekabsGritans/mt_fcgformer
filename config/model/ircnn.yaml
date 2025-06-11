@@ -6,7 +6,7 @@ init:
   _target_: models.ircnn.IrCNN
 
 # hyperparameters
-input_dim: 1024
-output_dim: 17
+spectrum_dim: 1024
+
 kernel_size: 11
 dropout_p: 0.48599073736368

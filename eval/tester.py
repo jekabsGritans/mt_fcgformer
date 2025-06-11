@@ -15,6 +15,7 @@ from utils.mlflow_utils import download_artifact, log_config, log_config_params
 class Tester:
     """
     This evaluates the model on the test dataset.
+    Log results to MLFlow.
     """
     def __init__(self, nn: NeuralNetworkModule, test_dataset: MLFlowDataset, cfg: DictConfig):
         self.nn = nn.to(cfg.device)
@@ -32,7 +33,6 @@ class Tester:
         """
         Load model state from checkpoint.
         """
-
         self.nn.load_state_dict(torch.load(model_path))
     
     def download_checkpoint(self, run_id: str, tag: str):
@@ -47,7 +47,6 @@ class Tester:
         Evaluate the model on the test dataset.
         Log results to MLFlow.
         """
-
         log_config(self.cfg)
         log_config_params(self.cfg)
 
@@ -56,7 +55,13 @@ class Tester:
             run_id, tag = self.cfg.checkpoint.split("/")
             self.download_checkpoint(run_id, tag)
 
-        predictions = torch.zeros_like(self.dataset.target, device=self.cfg.device) # (num_samples, num_targets) 0/1 for each target
+        # Only handle functional group targets
+        fg_predictions = torch.zeros_like(self.dataset.fg_targets, device=self.cfg.device)
+
+        # Track loss components - only fg and total losses
+        total_loss = 0.0
+        fg_loss_sum = 0.0
+        samples_seen = 0
 
         self.nn.eval()
 
@@ -65,39 +70,65 @@ class Tester:
             for batch in tqdm(self.data_loader, desc="Testing", unit="batch"):
                 batch = dict_to_device(batch, self.cfg.device)
                 step_out = self.nn.step(batch)
-                logits = step_out["logits"] 
-
-                preds = torch.sigmoid(logits)
-                preds = (preds > self.cfg.tester.threshold).float()
-
-                batch_size = preds.shape[0]
+                
+                # Get losses
+                batch_size = step_out["fg_logits"].shape[0]
+                samples_seen += batch_size
+                
+                # Get total loss and fg loss
+                total_loss += step_out["loss"].item() * batch_size
+                fg_loss_sum += step_out["fg_loss"].item() * batch_size
+                
+                # Make predictions for functional groups only
+                fg_logits = step_out["fg_logits"]
+                fg_preds = torch.sigmoid(fg_logits)
+                fg_preds = (fg_preds > self.cfg.tester.threshold).float()
+                
                 end_idx = start_idx + batch_size
-                predictions[start_idx:end_idx] = preds
-
+                fg_predictions[start_idx:end_idx] = fg_preds
+                
                 start_idx = end_idx
 
-        metrics = compute_metrics(predictions, self.dataset.target)
-
+        # Calculate average losses
+        avg_total_loss = total_loss / samples_seen if samples_seen > 0 else 0.0
+        avg_fg_loss = fg_loss_sum / samples_seen if samples_seen > 0 else 0.0
+        
+        # Initialize metrics dictionary for MLflow - just fg metrics
         mlflow_metrics = {
-            "overall/accuracy": metrics["overall_accuracy"],
-            "overall/precision": metrics["overall_precision"],
-            "overall/recall": metrics["overall_recall"],
-            "overall/f1": metrics["overall_f1"],
-            "overall/weighted_f1": metrics["weighted_avg_f1"],
-            "overall/emr": metrics["exact_match_ratio"]
+            "test/loss/total": avg_total_loss,
+            "test/loss/fg": avg_fg_loss
         }
-
-        for target_idx, target_name in enumerate(self.dataset.target_names):
-            mlflow_metrics[f"per_target/accuracy/{target_name}"] = metrics["per_target_accuracy"][target_idx]
-            mlflow_metrics[f"per_target/precision/{target_name}"] = metrics["per_target_precision"][target_idx]
-            mlflow_metrics[f"per_target/recall/{target_name}"] = metrics["per_target_recall"][target_idx]
-            mlflow_metrics[f"per_target/f1/{target_name}"] = metrics["per_target_f1"][target_idx]
+        
+        # Calculate and log functional group metrics
+        fg_metrics = compute_metrics(fg_predictions, self.dataset.fg_targets)
+        
+        mlflow_metrics.update({
+            "test/fg/accuracy": fg_metrics["overall_accuracy"],
+            "test/fg/precision": fg_metrics["overall_precision"],
+            "test/fg/recall": fg_metrics["overall_recall"],
+            "test/fg/f1": fg_metrics["overall_f1"],
+            "test/fg/weighted_f1": fg_metrics["weighted_avg_f1"],
+            "test/fg/emr": fg_metrics["exact_match_ratio"],
+        })
+        
+        # Log per-target metrics for functional groups
+        for target_idx, target_name in enumerate(self.dataset.fg_names):
+            mlflow_metrics[f"test/fg/accuracy/{target_name}"] = fg_metrics["per_target_accuracy"][target_idx]
+            mlflow_metrics[f"test/fg/precision/{target_name}"] = fg_metrics["per_target_precision"][target_idx]
+            mlflow_metrics[f"test/fg/recall/{target_name}"] = fg_metrics["per_target_recall"][target_idx]
+            mlflow_metrics[f"test/fg/f1/{target_name}"] = fg_metrics["per_target_f1"][target_idx]
 
         mlflow.log_metrics(mlflow_metrics)
 
-        # bar plot for per-target metrics
+        # Create visualizations for functional group metrics
+        self._create_fg_plots(fg_metrics, self.dataset.fg_names)
+
+    def _create_fg_plots(self, metrics, target_names):
+        """
+        Create and save plots for functional group target metrics.
+        """
         fig, ax = plt.subplots(2, 2, figsize=(14, 10))
-        fig.suptitle("Per-Target Metrics", fontsize=18, y=0.98)
+        fig.suptitle("Functional Group Metrics", fontsize=18, y=0.98)
         
         # Set consistent colors for the plots - using a colorblind-friendly palette
         colors = ['#4e79a7', '#f28e2c', '#59a14f', '#e15759']
@@ -113,7 +144,7 @@ class Tester:
         for i, (row, col) in enumerate([(0,0), (0,1), (1,0), (1,1)]):
             # Create the bar chart
             bars = ax[row, col].bar(
-                range(len(self.dataset.target_names)), 
+                range(len(target_names)), 
                 metrics_data[i],
                 color=colors[i],
                 width=0.7
@@ -134,8 +165,8 @@ class Tester:
             ax[row, col].set_ylabel(metric_names[i], fontsize=12)
             
             # Use integer positions for x-ticks but show target names as labels
-            ax[row, col].set_xticks(range(len(self.dataset.target_names)))
-            ax[row, col].set_xticklabels(self.dataset.target_names, rotation=45, ha='right', fontsize=10)
+            ax[row, col].set_xticks(range(len(target_names)))
+            ax[row, col].set_xticklabels(target_names, rotation=45, ha='right', fontsize=10)
             
             # Add grid for better readability
             ax[row, col].grid(axis='y', linestyle='--', alpha=0.7)
@@ -149,6 +180,5 @@ class Tester:
         plt.subplots_adjust(left=0.08, right=0.92, top=0.9, bottom=0.15)
         
         # Save the figure with tight layout
-        mlflow.log_figure(fig, "per_target_metrics.png")
+        mlflow.log_figure(fig, "fg_target_metrics.png")
         plt.close(fig)
-

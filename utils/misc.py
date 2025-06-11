@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import torch
 
 
@@ -24,3 +25,17 @@ def is_folder_filename_path(path_str: str) -> bool:
         path.parent != Path(".") and  # has a parent folder
         not path_str.endswith("/")    # does not end with slash (not a directory)
     )
+
+def interpolate(x: np.ndarray, y: np.ndarray, min_x: float, max_x: float, num_points: int) -> np.ndarray:
+    """
+    Interpolate y values for a given x range.
+    
+    :param x: Original x values
+    :param y: Original y values
+    :param min_x: Minimum x value for interpolation
+    :param max_x: Maximum x value for interpolation
+    :param num_points: Number of points in the interpolated range
+    :return: Interpolated y values
+    """
+    new_x = np.linspace(min_x, max_x, num_points)
+    return np.interp(new_x, x, y)

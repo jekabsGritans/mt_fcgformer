@@ -3,6 +3,8 @@ data/
 outputs/
 .env
 runs/
+**/runs/
 venv/
 **/*.pyc
 **/.ipynb_checkpoints
+**/tmp/

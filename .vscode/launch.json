@@ -5,19 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "train",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/main.py",
-            "console": "integratedTerminal",
-            "args": [
-                "mode=train",
-                "device=cpu",
-                "experiment_name=debug"
-            ]
-        },
-        {
-            "name": "train (cuda)",
+            "name": "train nist",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
@@ -25,7 +13,37 @@
             "args": [
                 "mode=train",
                 "device=cuda:0",
-                "experiment_name=debug"
+                "experiment_name=train_nist",
+                "dataset_id=fb3df43da2284161aee9f043a1a4ab33",
+                "model=fcgformer"
+            ]
+        },
+        {
+            "name": "train lser",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "mode=train",
+                "device=cuda:0",
+                "experiment_name=train_lser",
+                "dataset_id=b2977337d23d42d8ae7187f1b7df4b03",
+            ]
+        },
+        {
+            "name": "train rdk nist and chem",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "mode=train",
+                "device=cuda:0",
+                "experiment_name=train_rdk_chem",
+                "dataset_id=ad3a341068064582b108d4af626e4574",
+                "aux_bool_names=['h bonds', 'conjugation']",
+                "aux_float_names=['h donors', 'h acceptors', 'Topological Surface Area']"
             ]
         },
         {
@@ -62,7 +80,7 @@
             "console": "integratedTerminal",
             "args": [
                 "mode=deploy",
-                "checkpoint=b516fc37e5ba44c08d57b7a4cbd7d5e5/best",
+                "checkpoint=ef4750cf02cf452ab356e7585d54f04e/best",
                 "experiment_name=debug"
             ]
         },       

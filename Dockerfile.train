@@ -1,13 +1,29 @@
 # Dockerfile.train
-
-# Allow override of the base image tag
-ARG BASE_IMAGE=base-image:latest
-FROM ${BASE_IMAGE}
+# Use NVIDIA PyTorch image as base
+FROM nvcr.io/nvidia/pytorch:25.03-py3
 
 WORKDIR /workspace
 
+# Install any additional system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      build-essential git vim curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python dependencies
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
 # Bake in the full source for training
-COPY . .
+COPY config/ ./config/
+COPY models/ ./models/
+COPY datasets/ ./datasets/
+COPY train/ ./train/
+COPY utils/ ./utils/
+COPY eval/ ./eval/
+COPY deploy/ ./deploy/
+COPY main.py ./
+
 
 # Default entrypoint
 ENTRYPOINT ["python3", "main.py"]

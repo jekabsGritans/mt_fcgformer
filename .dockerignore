@@ -1,0 +1,27 @@
+# Development
+.git/
+.gitignore
+.env
+.vscode/
+.devcontainer/
+venv/
+__pycache__/
+**/__pycache__/
+**/*.pyc
+**/.ipynb_checkpoints
+**/tmp/
+scripts/
+
+# Data and outputs
+data/
+outputs/
+runs/
+**/runs/
+
+# Docker
+Dockerfile*
+.dockerignore
+docker-compose.yml
+
+# Documentation
+README.md

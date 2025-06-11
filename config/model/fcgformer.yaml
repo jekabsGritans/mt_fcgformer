@@ -1,0 +1,16 @@
+# Metadata
+name: fcgformer
+
+# Class to construct
+init:
+  _target_: models.fcgformer.FCGFormer
+
+# hyperparameters
+spectrum_dim: 1024
+
+patch_size: 16
+embed_dim: 768
+num_layers: 12
+expansion_factor: 4
+n_heads: 8
+dropout_p: 0.1

@@ -1,17 +1,17 @@
 #!/bin/bash
 set -e
 
-# Install dependencies
 apt-get update
-apt-get install -y --no-install-recommends build-essential git vim curl
-rm -rf /var/lib/apt/lists/*
+apt-get install -y --no-install-recommends git
 
-# Set up workspace and clone your code
 mkdir -p /workspace
 cd /workspace
-git clone https://github.com/jekabsGritans/mt_fcgformer.git .
 
-# Install Python dependencies if requirements.txt exists
+echo "Cloning repo..." | tee -a /workspace/provision.log
+git clone https://github.com/yourusername/yourrepo.git . 2>&1 | tee -a /workspace/provision.log
+
 if [ -f requirements.txt ]; then
     pip install --no-cache-dir -r requirements.txt
 fi
+
+echo "Provisioning complete." | tee -a /workspace/provision.log

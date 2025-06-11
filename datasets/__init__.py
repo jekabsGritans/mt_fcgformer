@@ -1,1 +1,1 @@
-from datasets.mlflow_dataset import MLFlowDataset
+from datasets.mlflow_dataset import MLFlowDataset, MLFlowDatasetAggregator

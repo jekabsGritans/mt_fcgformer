@@ -6,7 +6,7 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from datasets import MLFlowDataset
+from datasets import MLFlowDatasetAggregator
 from eval.metrics import compute_metrics
 from models import NeuralNetworkModule
 from utils.misc import dict_to_device, is_folder_filename_path
@@ -15,24 +15,14 @@ from utils.mlflow_utils import (download_artifact, get_run_id, log_config,
 
 
 class Trainer:
-    def __init__(self, nn: NeuralNetworkModule, train_dataset: MLFlowDataset, val_dataset: MLFlowDataset, cfg: DictConfig):
+    def __init__(self, nn: NeuralNetworkModule, train_agg: MLFlowDatasetAggregator, val_agg: MLFlowDatasetAggregator, cfg: DictConfig):
         self.nn = nn.to(cfg.device)
-        self.train_dataset = train_dataset.to(cfg.device)
-        self.val_dataset = val_dataset.to(cfg.device)
 
-        self.train_loader = DataLoader(
-            self.train_dataset,
-            batch_size=cfg.trainer.batch_size, shuffle=cfg.trainer.shuffle,
-            num_workers=cfg.trainer.num_workers, pin_memory=cfg.trainer.pin_memory,
-            persistent_workers=cfg.trainer.persistent_workers
-            )
-    
-        self.val_loader = DataLoader(
-            self.val_dataset,
-            batch_size=cfg.trainer.batch_size, shuffle=False,
-            num_workers=cfg.trainer.num_workers, pin_memory=cfg.trainer.pin_memory,
-            persistent_workers=cfg.trainer.persistent_workers
-            )
+        self.train_agg = train_agg
+        self.val_agg = val_agg
+
+        self.train_loader = train_agg.get_loader(batch_size=cfg.trainer.batch_size)
+        self.val_loader = val_agg.get_loader(batch_size=cfg.trainer.batch_size)
          
         self.optimizer = torch.optim.Adam(
             self.nn.parameters(), lr=cfg.trainer.lr
@@ -82,21 +72,15 @@ class Trainer:
         Reports metrics for functional groups and auxiliary targets if they exist.
         :return: Average validation loss
         """
-        # Initialize tensors for predictions
-        fg_predictions = torch.zeros_like(self.val_dataset.fg_targets, device=self.cfg.device)
-        
-        # Initialize aux prediction tensors only if they exist
-        if self.val_dataset.aux_bool_targets is not None:
-            aux_bool_predictions = torch.zeros_like(self.val_dataset.aux_bool_targets, device=self.cfg.device)
-        else:
-            aux_bool_predictions = None
-            
-        if self.val_dataset.aux_float_targets is not None:
-            aux_float_predictions = torch.zeros_like(self.val_dataset.aux_float_targets, device=self.cfg.device)
-        else:
-            aux_float_predictions = None
-
         self.nn.eval()
+
+        # Lists to store predictions and targets
+        fg_predictions_list = []
+        fg_targets_list = []
+        aux_bool_predictions_list = []
+        aux_bool_targets_list = []
+        aux_float_predictions_list = []
+        aux_float_targets_list = []
 
         total_loss = 0.0
         fg_loss_sum = 0.0
@@ -105,7 +89,6 @@ class Trainer:
         samples_seen = 0
 
         with torch.no_grad():
-            start_idx = 0
             for batch in tqdm(self.val_loader, desc="Validating", unit="batch"):
                 batch = dict_to_device(batch, self.cfg.device)
                 step_out = self.nn.step(batch)
@@ -130,22 +113,25 @@ class Trainer:
                 fg_preds = torch.sigmoid(fg_logits)
                 fg_preds = (fg_preds > self.cfg.trainer.validator.threshold).float()
                 
-                end_idx = start_idx + batch_size
-                fg_predictions[start_idx:end_idx] = fg_preds
+                fg_predictions_list.append(fg_preds)
+                fg_targets_list.append(batch["fg_targets"])
                 
                 # Make predictions for auxiliary boolean targets
-                if "aux_bool_logits" in step_out and aux_bool_predictions is not None:
+                if "aux_bool_logits" in step_out and "aux_bool_targets" in batch:
                     aux_bool_logits = step_out["aux_bool_logits"]
                     aux_bool_preds = torch.sigmoid(aux_bool_logits)
                     aux_bool_preds = (aux_bool_preds > self.cfg.trainer.validator.threshold).float()
-                    aux_bool_predictions[start_idx:end_idx] = aux_bool_preds
+                    aux_bool_predictions_list.append(aux_bool_preds)
+                    aux_bool_targets_list.append(batch["aux_bool_targets"])
                 
                 # Make predictions for auxiliary float targets
-                if "aux_float_preds" in step_out and aux_float_predictions is not None:
-                    aux_float_preds = step_out["aux_float_preds"]
-                    aux_float_predictions[start_idx:end_idx] = aux_float_preds
-                    
-                start_idx = end_idx
+                if "aux_float_preds" in step_out and "aux_float_targets" in batch:
+                    aux_float_predictions_list.append(step_out["aux_float_preds"])
+                    aux_float_targets_list.append(batch["aux_float_targets"])
+        
+        # Concatenate all predictions and targets
+        fg_predictions = torch.cat(fg_predictions_list, dim=0)
+        fg_targets = torch.cat(fg_targets_list, dim=0)
         
         # Calculate average losses
         avg_total_loss = total_loss / samples_seen if samples_seen > 0 else 0.0
@@ -167,7 +153,7 @@ class Trainer:
             mlflow_metrics["val/loss/aux_float"] = avg_aux_float_loss
         
         # Calculate and log functional group metrics
-        fg_metrics = compute_metrics(fg_predictions, self.val_dataset.fg_targets)
+        fg_metrics = compute_metrics(fg_predictions, fg_targets)
         
         mlflow_metrics.update({
             "val/fg/accuracy": fg_metrics["overall_accuracy"],
@@ -179,15 +165,17 @@ class Trainer:
         })
         
         # Log per-target metrics for functional groups
-        for target_idx, target_name in enumerate(self.val_dataset.fg_names):
+        for target_idx, target_name in enumerate(self.cfg.fg_names):
             mlflow_metrics[f"val/fg/accuracy/{target_name}"] = fg_metrics["per_target_accuracy"][target_idx]
             mlflow_metrics[f"val/fg/precision/{target_name}"] = fg_metrics["per_target_precision"][target_idx]
             mlflow_metrics[f"val/fg/recall/{target_name}"] = fg_metrics["per_target_recall"][target_idx]
             mlflow_metrics[f"val/fg/f1/{target_name}"] = fg_metrics["per_target_f1"][target_idx]
         
         # Calculate and log auxiliary boolean metrics if they exist
-        if aux_bool_predictions is not None and hasattr(self.val_dataset, 'aux_bool_targets'):
-            aux_bool_metrics = compute_metrics(aux_bool_predictions, self.val_dataset.aux_bool_targets) # type: ignore
+        if aux_bool_predictions_list and len(self.cfg.aux_bool_names) > 0:
+            aux_bool_predictions = torch.cat(aux_bool_predictions_list, dim=0)
+            aux_bool_targets = torch.cat(aux_bool_targets_list, dim=0)
+            aux_bool_metrics = compute_metrics(aux_bool_predictions, aux_bool_targets)
             
             mlflow_metrics.update({
                 "val/aux_bool/accuracy": aux_bool_metrics["overall_accuracy"],
@@ -199,19 +187,22 @@ class Trainer:
             })
             
             # Log per-target metrics for auxiliary boolean targets
-            for target_idx, target_name in enumerate(self.val_dataset.aux_bool_names):
+            for target_idx, target_name in enumerate(self.cfg.aux_bool_names):
                 mlflow_metrics[f"val/aux_bool/accuracy/{target_name}"] = aux_bool_metrics["per_target_accuracy"][target_idx]
                 mlflow_metrics[f"val/aux_bool/precision/{target_name}"] = aux_bool_metrics["per_target_precision"][target_idx]
                 mlflow_metrics[f"val/aux_bool/recall/{target_name}"] = aux_bool_metrics["per_target_recall"][target_idx]
                 mlflow_metrics[f"val/aux_bool/f1/{target_name}"] = aux_bool_metrics["per_target_f1"][target_idx]
         
         # Calculate and log auxiliary float metrics if they exist
-        if aux_float_predictions is not None and hasattr(self.val_dataset, 'aux_float_targets'):
+        if aux_float_predictions_list and len(self.cfg.aux_float_names) > 0:
+            aux_float_predictions = torch.cat(aux_float_predictions_list, dim=0)
+            aux_float_targets = torch.cat(aux_float_targets_list, dim=0)
+            
             # Calculate MSE for each target
-            mse_per_target = torch.mean((aux_float_predictions - self.val_dataset.aux_float_targets) ** 2, dim=0) # type: ignore
+            mse_per_target = torch.mean((aux_float_predictions - aux_float_targets) ** 2, dim=0)
             
             # Calculate MAE for each target
-            mae_per_target = torch.mean(torch.abs(aux_float_predictions - self.val_dataset.aux_float_targets), dim=0) # type: ignore
+            mae_per_target = torch.mean(torch.abs(aux_float_predictions - aux_float_targets), dim=0)
             
             # Calculate overall MSE and MAE
             overall_mse = torch.mean(mse_per_target)
@@ -223,14 +214,13 @@ class Trainer:
             })
             
             # Log per-target metrics for auxiliary float targets
-            for target_idx, target_name in enumerate(self.val_dataset.aux_float_names):
+            for target_idx, target_name in enumerate(self.cfg.aux_float_names):
                 mlflow_metrics[f"val/aux_float/mse/{target_name}"] = mse_per_target[target_idx].item()
                 mlflow_metrics[f"val/aux_float/mae/{target_name}"] = mae_per_target[target_idx].item()
         
         # Log all metrics
         mlflow.log_metrics(mlflow_metrics, step=total_steps)
         
-        # Return total loss for early stopping
         return avg_total_loss
 
     def train(self):

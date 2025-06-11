@@ -8,7 +8,9 @@ import numpy as np
 import pandas as pd
 import torch
 from omegaconf import DictConfig
-from torch.utils.data import Dataset
+from torch.utils.data import (ConcatDataset, DataLoader, Dataset,
+                              WeightedRandomSampler)
+from zmq import has
 
 from utils.mlflow_utils import download_artifact
 
@@ -37,17 +39,13 @@ class MLFlowDataset(Dataset):
 
     spectrum_transform: Transform | None # random train transforms only applied to spectra
 
-    cfg: DictConfig
-    dataset_id: str
-    split: str
+    device: torch.device | str
 
-    def __init__(self, cfg: DictConfig, dataset_id: str, split: str,
+    def __init__(self, device: torch.device | str,
                  fg_names: list[str], aux_bool_names: list[str], aux_float_names: list[str],
                  spectrum_transform: Transform | None = None):
         super().__init__()
-        self.cfg = cfg
-        self.dataset_id = dataset_id
-        self.split = split
+        self.device = device
 
         assert len(fg_names) > 0, "fg_names must not be empty"
         self.fg_names = fg_names
@@ -56,22 +54,20 @@ class MLFlowDataset(Dataset):
         
         self.spectrum_transform = spectrum_transform
 
-        self.download()
-        
     def load_df(self, df: pd.DataFrame):
         assert "spectrum" in df.columns, "spectrum column not found in dataframe"
 
         self.df = df
 
         # spectra
-        self.spectra = torch.tensor(np.stack(df["spectrum"]), dtype=torch.float32, device=self.cfg.device) # type: ignore
+        self.spectra = torch.tensor(np.stack(df["spectrum"]), dtype=torch.float32, device=self.device) # type: ignore
 
         # functional groups
         cols = []
         for target in self.fg_names:
             assert target in df.columns, f"{target} column not found in dataframe"
             assert df[target].dtype == bool, f"{target} column is not bool"
-            col = torch.tensor(df[target], dtype=torch.bool, device=self.cfg.device) # type: ignore
+            col = torch.tensor(df[target], dtype=torch.bool, device=self.device) # type: ignore
             cols.append(col)
 
         self.fg_targets = torch.stack(cols, dim=1)
@@ -87,7 +83,7 @@ class MLFlowDataset(Dataset):
             for target in self.aux_bool_names:
                 assert target in df.columns, f"{target} column not found in dataframe"
                 assert df[target].dtype == bool, f"{target} column is not bool"
-                col = torch.tensor(df[target], dtype=torch.bool, device=self.cfg.device) # type: ignore
+                col = torch.tensor(df[target], dtype=torch.bool, device=self.device) # type: ignore
                 cols.append(col)
 
             self.aux_bool_targets = torch.stack(cols, dim=1)
@@ -102,28 +98,10 @@ class MLFlowDataset(Dataset):
             for target in self.aux_float_names:
                 assert target in df.columns, f"{target} column not found in dataframe"
                 assert df[target].dtype in [float, int], f"{target} column is not float or int"
-                col = torch.tensor(df[target], dtype=torch.float32, device=self.cfg.device)
+                col = torch.tensor(df[target], dtype=torch.float32, device=self.device)
                 cols.append(col)
 
             self.aux_float_targets = torch.stack(cols, dim=1)
-
-    def download(self):
-        df_path = download_artifact(self.cfg, self.dataset_id, f"{self.split}_df.csv.gz")
-
-        # cache unzipped
-        pkl_path = df_path.replace('.csv.gz', '.pkl')
-        if os.path.exists(pkl_path):
-            print("Loading cached dataset pkl")
-            self.df = pd.read_pickle(pkl_path)
-        else:
-            print("Unzipping dataset...")
-            self.df = pd.read_csv(df_path, compression='gzip')
-            print("Converting spectra...")
-            str_to_arr = lambda st: np.array(ast.literal_eval(st), dtype=np.float32)
-            self.df["spectrum"] = self.df["spectrum"].apply(str_to_arr) # type: ignore
-            self.df.to_pickle(pkl_path) 
-
-        self.load_df(self.df)
 
     def _compute_pos_weights(self, pos_counts: list[int]) -> list[float]:
         """
@@ -149,7 +127,7 @@ class MLFlowDataset(Dataset):
         
         return pos_weights
     
-    def to(self, device: torch.device) -> MLFlowDataset:
+    def to(self, device: torch.device | str) -> MLFlowDataset:
         """
         Move the dataset to the specified device.
         :param device: Device to move the dataset to
@@ -160,6 +138,8 @@ class MLFlowDataset(Dataset):
             self.aux_bool_targets = self.aux_bool_targets.to(device)
         if self.aux_float_targets is not None:
             self.aux_float_targets = self.aux_float_targets.to(device)
+
+        self.device = device
 
         return self
 
@@ -197,6 +177,91 @@ class MLFlowDataset(Dataset):
         return out
 
 
+class MLFlowDatasetAggregator:
+    """
+    - pos weights come from specified list of datasets.
+    """
 
+    datasets: dict[str, MLFlowDataset] # e.g. nist:..., chemmotion:..., graphformer:...
+    cfg: DictConfig
+    dataset_id: str
+    split: str
 
+    fg_names: list[str] # names of functional groups
 
+    def __init__(self, cfg: DictConfig, dataset_id: str, split: str, spectrum_transform: Transform | None):
+        self.cfg = cfg
+        self.dataset_id = dataset_id
+        self.split = split
+
+        self.spectrum_transform = spectrum_transform
+
+        self.datasets = {}
+
+        self.download()
+
+    def download(self):
+
+        # master df
+        df_path = download_artifact(self.cfg, self.dataset_id, f"{self.split}_df.csv.gz")
+
+        # cache unzipped
+        pkl_path = df_path.replace('.csv.gz', '.pkl')
+        if os.path.exists(pkl_path):
+            print("Loading cached dataset pkl")
+            self.df = pd.read_pickle(pkl_path)
+        else:
+            print("Unzipping dataset...")
+            self.df = pd.read_csv(df_path, compression='gzip')
+            print("Converting spectra...")
+            str_to_arr = lambda st: np.array(ast.literal_eval(st), dtype=np.float32)
+            self.df["spectrum"] = self.df["spectrum"].apply(str_to_arr) # type: ignore
+            self.df.to_pickle(pkl_path) 
+
+        # split up
+        assert "source" in self.df.columns, "source column not found in dataframe"
+        assert "lser" in self.df.columns, "lser column not found in dataframe"
+
+        sources = self.df["source"].unique()
+
+        for source_name in sources:
+            for is_lser in [True, False]:
+                print(f"Loading dataset for source {source_name} and lser {is_lser}")
+                # filter
+                df_filtered = self.df[(self.df["source"] == source_name) & (self.df["lser"] == is_lser)]
+                assert not df_filtered.empty, f"No data found for source {source_name} and lser {is_lser}"
+
+                # create dataset
+                dataset = MLFlowDataset(
+                    device=self.cfg.device,
+                    fg_names=self.cfg.fg_names,
+                    aux_bool_names=self.cfg.aux_bool_names,
+                    aux_float_names=self.cfg.aux_float_names,
+                    spectrum_transform=self.spectrum_transform
+                )
+                dataset.load_df(df_filtered)
+                dataset_name = f"{source_name}_lser" if is_lser else source_name
+                self.datasets[dataset_name] = dataset
+        
+    def get_loader(self, batch_size: int) -> DataLoader:
+        dataset_names = list(self.datasets.keys())
+        combined_dataset = ConcatDataset([self.datasets[name] for name in dataset_names])
+
+        if self.split == "train":
+            if len(dataset_names) > 1:
+                # Weighted sampling for multi-source training
+                weights = []
+                for name in dataset_names:
+                    dataset = self.datasets[name]
+                    weight = getattr(self.cfg, f"{name}_weight")
+                    weights += [weight] * len(dataset)
+                sampler = WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
+                dataloader = DataLoader(combined_dataset, batch_size=batch_size, sampler=sampler)
+            else:
+                # Regular shuffling for single-source training
+                dataloader = DataLoader(combined_dataset, batch_size=batch_size, shuffle=True)
+        else:
+            # Deterministic order for validation
+            dataloader = DataLoader(combined_dataset, batch_size=batch_size, shuffle=False)
+
+        return dataloader

@@ -17,6 +17,20 @@ fg_names: [alkane, methyl, alkene, alkyne, alcohols, amines, nitriles, aromatics
 aux_bool_names: []
 aux_float_names: []
 
+# weight accross datasets
+# these should probablt be derived for hyperparam opt
+nist_weight: 1.0
+nist_lser_weight: 0.2
+
+chemmotion_weight: 0.5
+chemmotion_lser_weight: 0.1
+
+graphformer_weight: 0.2
+graphformer_lser_weight: 0.2
+
+# on top of source weight, multiply lser samples by this
+lser_ratio: 0.3
+
 trainer:
   lr: 1e-3
   epochs: 200
@@ -31,17 +45,8 @@ trainer:
   checkpoint_interval_epochs: 2 # checkpoint every 2 epochs
   log_interval_steps: 100 # log metrics every 100 training steps
 
-  # needs to be single-threaded if we store dataset in gpu memory
-  # for cpu, can speed up by making multithreaded and settings persistent_workers, pin_memory to true
-  num_workers: 0
-  persistent_workers: False
-  pin_memory: False
-
   validator:
     batch_size: 32
-    num_workers: 0
-    persistent_workers: False
-    pin_memory: False
     threshold: 0.5
 
 tester:
@@ -50,7 +55,6 @@ tester:
   persistent_workers: False
   pin_memory: False
   threshold: 0.5
-
 
 mode: null # mode is set via CLI override (train or test)
 checkpoint: null # {run_id}/{checkpoint_tag} e.g. 30925325/best

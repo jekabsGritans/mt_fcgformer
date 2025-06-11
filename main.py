@@ -6,7 +6,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig
 
 import utils.transforms as T
-from datasets import MLFlowDataset
+from datasets import MLFlowDatasetAggregator
 from deploy import deploy_model_from_config
 from eval import Tester
 from train import Trainer
@@ -28,7 +28,7 @@ def main(cfg: DictConfig):
     model = instantiate(cfg.model.init, cfg=cfg, _recursive_=False)
     nn = model.nn
 
-    assert cfg.mode in ["train", "test", "deploy"], f"Invalid mode: {cfg.mode}. Must be one of ['train', 'test', 'deploy']"
+    assert cfg.mode in ["train", "deploy"], f"Invalid mode: {cfg.mode}. Must be one of ['train', 'deploy']"
 
     # start MLflow run
     mlflow.set_experiment(cfg.experiment_name)
@@ -46,19 +46,16 @@ def main(cfg: DictConfig):
         mlflow.set_tag("dataset", dataset_name)
 
         if cfg.mode == "train":
-            train_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset_id, split="train", fg_names=cfg.fg_names, aux_bool_names=cfg.aux_bool_names, aux_float_names=cfg.aux_float_names, spectrum_transform=train_transforms)
-            val_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset_id, split="valid", fg_names=cfg.fg_names, aux_bool_names=cfg.aux_bool_names, aux_float_names=cfg.aux_float_names, spectrum_transform=eval_transforms)
+            train_agg = MLFlowDatasetAggregator(cfg=cfg, dataset_id=cfg.dataset_id, split="train", spectrum_transform=train_transforms)
+            val_agg = MLFlowDatasetAggregator(cfg=cfg, dataset_id=cfg.dataset_id, split="valid", spectrum_transform=eval_transforms)
 
             # pos weights only relevant for training
-            nn.setup_loss(fg_pos_weights=train_dataset.fg_pos_weights, aux_pos_weights=train_dataset.aux_pos_weights)
+            fg_pos_weights = train_agg.datasets["nist"].fg_pos_weights
+            aux_pos_weights = train_agg.datasets["nist"].aux_pos_weights
+            nn.setup_loss(fg_pos_weights=fg_pos_weights, aux_pos_weights=aux_pos_weights)
 
-            trainer = Trainer(nn=nn, train_dataset=train_dataset, val_dataset=val_dataset, cfg=cfg)
+            trainer = Trainer(nn=nn, train_agg=train_agg, val_agg=val_agg, cfg=cfg)
             trainer.train()
-
-        elif cfg.mode == "test":
-            test_dataset = MLFlowDataset(cfg=cfg, dataset_id=cfg.dataset_id, split="test", fg_names=cfg.fg_names, aux_bool_names=cfg.aux_bool_names, aux_float_names=cfg.aux_float_names, spectrum_transform=eval_transforms)
-            tester = Tester(nn=nn, test_dataset=test_dataset, cfg=cfg)
-            tester.test()
 
         elif cfg.mode == "deploy":
             # Deploy model to MLflow registry

@@ -43,6 +43,7 @@ chmod 600 ~/.ssh/optuna/id_rsa
 VPS_HOST=${VPS_HOST:-"138.199.214.167"}
 VPS_USER=${VPS_USER:-"optuna-user"}
 VPS_PORT=${VPS_PORT:-"22"}
+DB_HOST=${DB_HOST:-"192.168.6.5"} # Actual database server hostname
 DB_PORT=${DB_PORT:-"3307"}
 LOCAL_PORT=${LOCAL_PORT:-"13306"}
 
@@ -66,7 +67,8 @@ chmod 600 ~/.ssh/optuna/config
 cat > /root/start_tunnel.sh << EOF
 #!/bin/bash
 pkill -f "autossh.*optuna-tunnel-process" || true
-autossh -M 0 -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -L $LOCAL_PORT:localhost:$DB_PORT -F ~/.ssh/optuna/config optuna-tunnel optuna-tunnel-process
+# Connect to VPS and forward to the actual database server
+autossh -M 0 -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -L $LOCAL_PORT:$DB_HOST:$DB_PORT -F ~/.ssh/optuna/config optuna-tunnel optuna-tunnel-process
 EOF
 chmod +x /root/start_tunnel.sh
 
@@ -109,7 +111,7 @@ EOF
 chmod +x /root/attach_optuna.sh
 
 echo "==== Provisioning Completed: $(date) ===="
-echo "SSH tunnel established to $VPS_HOST:$VPS_PORT forwarding localhost:$LOCAL_PORT to localhost:$DB_PORT"
+echo "SSH tunnel established to $VPS_HOST:$VPS_PORT forwarding localhost:$LOCAL_PORT to $DB_HOST:$DB_PORT"
 echo "Database URL: $OPTUNA_DB_URL"
 echo "To check tunnel status: /root/check_tunnel.sh"
 echo "To attach to Optuna session: /root/attach_optuna.sh"

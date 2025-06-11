@@ -24,8 +24,8 @@ class Trainer:
         self.train_loader = train_agg.get_loader(batch_size=cfg.trainer.batch_size)
         self.val_loader = val_agg.get_loader(batch_size=cfg.trainer.batch_size)
          
-        self.optimizer = torch.optim.Adam(
-            self.nn.parameters(), lr=cfg.trainer.lr
+        self.optimizer = torch.optim.AdamW(
+            self.nn.parameters(), lr=cfg.trainer.lr, weight_decay=cfg.trainer.weight_decay
         )
 
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer=self.optimizer, T_0=cfg.trainer.scheduler_t0, T_mult=cfg.trainer.scheduler_tmult)
@@ -242,6 +242,12 @@ class Trainer:
                 self.nn.train()
 
                 for batch_idx, batch in enumerate(tqdm(self.train_loader, desc=f"Epoch [{epoch+1}/{self.cfg.trainer.epochs}]")):
+                    if total_steps < self.cfg.trainer.warmup_steps:
+                        # Linear warmup
+                        warmup_factor = float(total_steps) / float(max(1, self.cfg.trainer.warmup_steps))
+                        for param_group in self.optimizer.param_groups:
+                            param_group['lr'] = self.cfg.trainer.lr * warmup_factor
+
                     batch = dict_to_device(batch, self.cfg.device)
 
                     step_out = self.nn.step(batch)
@@ -249,6 +255,7 @@ class Trainer:
 
                     self.optimizer.zero_grad()
                     loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.nn.parameters(), max_norm=1.0)
                     self.optimizer.step()
 
                     # log batch metrics with separate loss components
@@ -268,7 +275,8 @@ class Trainer:
                             
                         mlflow.log_metrics(metrics, step=total_steps)
 
-                    self.scheduler.step(epoch + batch_idx / len(self.train_loader))  # type: ignore
+                    if total_steps >= self.cfg.trainer.warmup_steps:  
+                        self.scheduler.step(epoch + batch_idx / len(self.train_loader)) # type: ignore
 
                     total_steps += 1
 

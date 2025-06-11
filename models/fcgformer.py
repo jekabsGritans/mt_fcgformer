@@ -21,23 +21,28 @@ from utils.transforms import Compose
 
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, embed_dim=512, n_heads=8):
+    def __init__(self, embed_dim=512, n_heads=8, dropout_p=0.1):
         """
         Args:
             embed_dim: dimension of embedding vector output
             n_heads: number of self attention heads
+            dropout_p: dropout probability for attention weights
         """
         super().__init__()
 
-        self.embed_dim = embed_dim  # 512 dim
-        self.n_heads = n_heads  # 8
-        self.single_head_dim = int(self.embed_dim / self.n_heads)  # 512/8 = 64  . each key,query, value will be of 64d
+        self.embed_dim = embed_dim
+        self.n_heads = n_heads
+        self.single_head_dim = int(self.embed_dim / self.n_heads)
 
-        # key,query and value matrices
+        # key, query and value matrices
         self.query_matrix = nn.Linear(self.single_head_dim, self.single_head_dim, bias=False)
         self.key_matrix = nn.Linear(self.single_head_dim, self.single_head_dim, bias=False)
         self.value_matrix = nn.Linear(self.single_head_dim, self.single_head_dim, bias=False)
         self.out = nn.Linear(self.n_heads * self.single_head_dim, self.embed_dim)
+        
+        # Add attention dropout
+        self.attn_dropout = nn.Dropout(dropout_p)
+        self.proj_dropout = nn.Dropout(dropout_p)
         self.attention_map = None
 
     def forward(self, key, query, value, mask=None):
@@ -66,6 +71,9 @@ class MultiHeadAttention(nn.Module):
 
         product = product / math.sqrt(self.single_head_dim)
         scores = F.softmax(product, dim=-1)
+        
+        # Apply dropout to attention weights
+        scores = self.attn_dropout(scores)
         self.attention_map = scores
 
         scores = torch.matmul(scores, v)
@@ -74,15 +82,18 @@ class MultiHeadAttention(nn.Module):
         )
 
         output = self.out(concat)
+        # Add projection dropout
+        output = self.proj_dropout(output)
         return output
 
 class TransformerBlock(nn.Module):
     def __init__(self, embed_dim, expansion_factor=4, n_heads=8, dropout_p=0.2):
         super(TransformerBlock, self).__init__()
 
-        self.attention = MultiHeadAttention(embed_dim, n_heads)
-        self.norm1 = nn.LayerNorm(embed_dim)
-        self.norm2 = nn.LayerNorm(embed_dim)
+        self.attention = MultiHeadAttention(embed_dim, n_heads, dropout_p)
+        # Pre-layer normalization
+        self.norm1 = nn.LayerNorm(embed_dim, eps=1e-6)
+        self.norm2 = nn.LayerNorm(embed_dim, eps=1e-6)
 
         self.feed_forward = nn.Sequential(
             nn.Linear(embed_dim, expansion_factor * embed_dim),
@@ -94,17 +105,20 @@ class TransformerBlock(nn.Module):
         self.dropout1 = nn.Dropout(dropout_p)
         self.dropout2 = nn.Dropout(dropout_p)
 
-    def forward(self, key, query, value):
-        attention_out = self.attention(key, query, value)
-        attention_residual_out = attention_out + query
-        norm1_out = self.dropout1(self.norm1(attention_residual_out))
-
-        feed_fwd_out = self.feed_forward(norm1_out)
-        feed_fwd_residual_out = feed_fwd_out + norm1_out
-        norm2_out = self.dropout2(self.norm2(feed_fwd_residual_out))
-
-        return norm2_out
-
+    def forward(self, x):
+        # Pre-norm: Apply normalization before attention
+        norm_x = self.norm1(x)
+        # Self-attention: same input for K, Q, V
+        attention_out = self.attention(norm_x, norm_x, norm_x)
+        # Apply dropout and residual connection
+        x = x + self.dropout1(attention_out)
+        
+        # Pre-norm: Apply normalization before FFN
+        norm_x = self.norm2(x)
+        # Apply FFN and dropout
+        x = x + self.dropout2(self.feed_forward(norm_x))
+        
+        return x
 
 class PatchEmbed(nn.Module):
     def __init__(self, spectrum_dim, patch_size, in_chans=1, embed_dim=768):
@@ -119,13 +133,16 @@ class PatchEmbed(nn.Module):
             kernel_size=patch_size,
             stride=patch_size,
         )
+        
+        # Add normalization layer
+        self.norm = nn.LayerNorm(embed_dim)
 
     def forward(self, x):
         x = x.unsqueeze(1)  # (batch_size, in_chans, spectrum_dim)
         x = self.proj(x)
         x = x.transpose(1, 2)  # (batch_size, n_patches, embed_dim)
+        x = self.norm(x)  # Apply layer normalization
         return x
-
 
 class FCGFormerModule(NeuralNetworkModule):
     """Neural network architecture for FCGFormer"""
@@ -141,31 +158,80 @@ class FCGFormerModule(NeuralNetworkModule):
             embed_dim=embed_dim,
         )
         
-        # 1. Initialize with small random values instead of zeros
+        # Initialize with small random values
         self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim) * 0.02)
         
-        # 2. Create proper sinusoidal position embeddings
+        # Create sinusoidal position embeddings
         num_positions = 1 + self.patch_embed.n_patches
         self.pos_embed = nn.Parameter(
             self._create_sinusoidal_embeddings(num_positions, embed_dim)
         )
         
+        # Increase dropout for better regularization
         self.pos_drop = nn.Dropout(p=dropout_p)
+        self.embed_drop = nn.Dropout(p=dropout_p)
+        self.cls_dropout = nn.Dropout(p=dropout_p)
 
-        # 3. Initialize layers with a smaller dropout for early training
+        # Initialize transformer blocks with graduated dropout
         self.layers = nn.ModuleList([
-            TransformerBlock(embed_dim, expansion_factor, n_heads, dropout_p=min(0.1, dropout_p * (i+1)/num_layers))
+            TransformerBlock(
+                embed_dim, 
+                expansion_factor, 
+                n_heads, 
+                dropout_p=min(0.1, dropout_p * (i+1)/num_layers)
+            )
             for i in range(num_layers)
         ])
 
         self.norm = nn.LayerNorm(embed_dim, eps=1e-6)
         
-        # 4. Add classification head with proper initialization
+        # Classification head
         self.head = nn.Linear(embed_dim, fg_target_dim)
         nn.init.xavier_uniform_(self.head.weight)
         nn.init.zeros_(self.head.bias)
 
         self._init_weights()
+
+    def forward(self, x):
+        n_samples = x.shape[0]
+        
+        # Apply patch embedding
+        embed_out = self.patch_embed(x)  # (n_samples, n_patches, embed_dim)
+        
+        # Add extra dropout after patch embedding
+        embed_out = self.embed_drop(embed_out)
+        
+        # Prepend CLS token
+        cls_token = self.cls_token.expand(n_samples, -1, -1)  # (n_samples, 1, embed_dim)
+        embed_out = torch.cat((cls_token, embed_out), dim=1)  # (n_samples, 1+n_patches, embed_dim)
+        
+        # Add positional encoding
+        embed_out = embed_out + self.pos_embed  # (n_samples, 1+n_patches, embed_dim)
+        embed_out = self.pos_drop(embed_out)
+
+        # Store attention maps for visualization
+        self.attention_maps = []
+        
+        # Apply transformer blocks
+        for layer in self.layers:
+            embed_out = layer(embed_out)
+            if hasattr(layer.attention, 'attention_map'):
+                self.attention_maps.append(layer.attention.attention_map.detach().clone())
+
+        # Apply final layer normalization
+        embed_out = self.norm(embed_out)
+
+        # Extract CLS token
+        cls_token_final = embed_out[:, 0]  # just CLS token
+        
+        # Apply dropout before classification head
+        cls_token_final = self.cls_dropout(cls_token_final)
+        
+        # Apply classification head
+        logits = self.head(cls_token_final)
+
+        out = {"fg_logits": logits}
+        return out
 
     def _init_weights(self):
         # Initialize all linear layers EXCEPT head
@@ -184,29 +250,7 @@ class FCGFormerModule(NeuralNetworkModule):
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term[:dim//2]) # handle odd dimensions
         return pe.unsqueeze(0)
-        
-    def forward(self, x):
-        n_samples = x.shape[0]
-        embed_out = self.patch_embed(x)  # (n_samples, n_patches, embed_dim)
-        cls_token = self.cls_token.expand(n_samples, -1, -1)  # (n_samples, 1, embed_dim)
-        embed_out = torch.cat((cls_token, embed_out), dim=1)  # (n_samples, 1+n_patches, embed_dim)
-        embed_out = embed_out + self.pos_embed  # (n_samples, 1+n_patches, embed_dim)
-        embed_out = self.pos_drop(embed_out)
-
-        # Store attention maps for each layer
-        self.attention_maps = []
-        
-        for layer in self.layers:
-            embed_out = layer(embed_out, embed_out, embed_out)
-            self.attention_maps.append(layer.attention.attention_map.detach().clone())
-
-        embed_out = self.norm(embed_out)
-
-        cls_token_final = embed_out[:, 0]  # just CLS token
-        logits = self.head(cls_token_final)
-
-        out = {"fg_logits": logits}
-        return out
+     
         
     def get_attention_maps(self):
         """Returns attention maps for visualization"""

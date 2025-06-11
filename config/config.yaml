@@ -32,11 +32,15 @@ graphformer_lser_weight: 0.2
 lser_ratio: 0.3
 
 trainer:
-  lr: 1e-4
+  lr: 5e-5
   epochs: 200
   batch_size: 128
   patience: 100 # stop training if validation loss does not improve for x subsequent epochs
   patience_threshold: 0.1
+
+  weight_decay: 0.01
+
+  warmup_steps: 2000
 
   scheduler_t0: 40
   scheduler_tmult: 2

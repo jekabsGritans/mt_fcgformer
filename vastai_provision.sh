@@ -1,15 +1,25 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
+# Optional: Logging for Vast.ai UI
+LOG_FILE="/var/log/provision.log"
+exec > >(tee -a $LOG_FILE) 2>&1
+
+echo "==== Starting Provisioning ===="
+
+# Install any system dependencies you need
 apt-get update
 apt-get install -y --no-install-recommends git
 
+# Clone your repository
 mkdir -p /workspace
 cd /workspace
+git clone https://github.com/jekabsGritans/mt_fcgformer.git repo
 
-echo "Cloning repo..." | tee -a /workspace/provision.log
-git clone https://github.com/jekabsGritans/mt_fcgformer.git /workspace/repo 2>&1 | tee -a /workspace/provision.log
+# Use the pre-installed Python and pip from the provided venv
+/venv/main/bin/pip install --upgrade pip
 
-pip install --no-cache-dir -r /workspace/repo/requirements.txt
+# Install requirements into the existing venv
+/venv/main/bin/pip install --no-cache-dir -r /workspace/repo/requirements.txt
 
-echo "Provisioning complete." | tee -a /workspace/provision.log
+echo "==== Provisioning Completed ===="

@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "train nist",
+            "name": "train",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
@@ -14,65 +14,17 @@
                 "mode=train",
                 "device=cuda:0",
                 "experiment_name=train_nist",
-                "dataset_id=fb3df43da2284161aee9f043a1a4ab33",
-                "model=fcgformer"
+                "dataset_id=157d4b53c95f4af88ee86fbcc319bce2",
+                "model=fcgformer",
+                "nist_weight=1.0",
+                "nist_lser_weight=0.0",
+                "chemmotion_weight=0.0",
+                "chemmotion_lser_weight=0.0",
+                "graphformer_weight=0.0",
+                "graphformer_lser_weight=0.0",
             ]
         },
         {
-            "name": "train lser",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/main.py",
-            "console": "integratedTerminal",
-            "args": [
-                "mode=train",
-                "device=cuda:0",
-                "experiment_name=train_lser",
-                "dataset_id=b2977337d23d42d8ae7187f1b7df4b03",
-            ]
-        },
-        {
-            "name": "train rdk nist and chem",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/main.py",
-            "console": "integratedTerminal",
-            "args": [
-                "mode=train",
-                "device=cuda:0",
-                "experiment_name=train_rdk_chem",
-                "dataset_id=ad3a341068064582b108d4af626e4574",
-                "aux_bool_names=['h bonds', 'conjugation']",
-                "aux_float_names=['h donors', 'h acceptors', 'Topological Surface Area']"
-            ]
-        },
-        {
-            "name": "test",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/main.py",
-            "console": "integratedTerminal",
-            "args": [
-                "mode=test",
-                "device=cpu",
-                "checkpoint=b516fc37e5ba44c08d57b7a4cbd7d5e5/best",
-                "experiment_name=debug"
-            ]
-        },
-        {
-            "name": "test (cuda)",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/main.py",
-            "console": "integratedTerminal",
-            "args": [
-                "mode=test",
-                "device=cuda:0",
-                "checkpoint=b516fc37e5ba44c08d57b7a4cbd7d5e5/best",
-                "experiment_name=debug"
-            ]
-        },
-         {
             "name": "deploy",
             "type": "debugpy",
             "request": "launch",

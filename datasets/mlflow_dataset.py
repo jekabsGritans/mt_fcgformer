@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import os
+from calendar import c
 from typing import Callable
 
 import numpy as np
@@ -67,7 +68,7 @@ class MLFlowDataset(Dataset):
         for target in self.fg_names:
             assert target in df.columns, f"{target} column not found in dataframe"
             assert df[target].dtype == bool, f"{target} column is not bool"
-            col = torch.tensor(df[target], dtype=torch.bool, device=self.device) # type: ignore
+            col = torch.tensor(df[target].to_numpy(), dtype=torch.bool, device=self.device) # type: ignore
             cols.append(col)
 
         self.fg_targets = torch.stack(cols, dim=1)
@@ -83,7 +84,7 @@ class MLFlowDataset(Dataset):
             for target in self.aux_bool_names:
                 assert target in df.columns, f"{target} column not found in dataframe"
                 assert df[target].dtype == bool, f"{target} column is not bool"
-                col = torch.tensor(df[target], dtype=torch.bool, device=self.device) # type: ignore
+                col = torch.tensor(df[target].to_numpy(), dtype=torch.bool, device=self.device) # type: ignore
                 cols.append(col)
 
             self.aux_bool_targets = torch.stack(cols, dim=1)
@@ -98,7 +99,7 @@ class MLFlowDataset(Dataset):
             for target in self.aux_float_names:
                 assert target in df.columns, f"{target} column not found in dataframe"
                 assert df[target].dtype in [float, int], f"{target} column is not float or int"
-                col = torch.tensor(df[target], dtype=torch.float32, device=self.device)
+                col = torch.tensor(df[target].to_numpy(), dtype=torch.float32, device=self.device)
                 cols.append(col)
 
             self.aux_float_targets = torch.stack(cols, dim=1)
@@ -121,8 +122,11 @@ class MLFlowDataset(Dataset):
         
         for pos_count in pos_counts:
             # Avoid division by zero
-            assert pos_count > 0, "Positive count cannot be zero"
-            weight = (total_samples - pos_count) / pos_count
+            if pos_count == 0:
+                print("Warning: Positive count is zero, setting weight to 0.0")
+                weight = 0.0
+            else:
+                weight = (total_samples - pos_count) / pos_count
             pos_weights.append(weight)
         
         return pos_weights
@@ -220,16 +224,19 @@ class MLFlowDatasetAggregator:
 
         # split up
         assert "source" in self.df.columns, "source column not found in dataframe"
-        assert "lser" in self.df.columns, "lser column not found in dataframe"
+        if "lser" not in self.df.columns:
+            print("Warning: lser column not found in dataframe, assuming all data is non-LSER")
+            self.df["lser"] = False
 
         sources = self.df["source"].unique()
 
         for source_name in sources:
-            for is_lser in [True, False]:
+            for is_lser in [False, True]:
                 print(f"Loading dataset for source {source_name} and lser {is_lser}")
                 # filter
                 df_filtered = self.df[(self.df["source"] == source_name) & (self.df["lser"] == is_lser)]
-                assert not df_filtered.empty, f"No data found for source {source_name} and lser {is_lser}"
+                if df_filtered.empty:
+                    continue
 
                 # create dataset
                 dataset = MLFlowDataset(
@@ -255,7 +262,9 @@ class MLFlowDatasetAggregator:
                     dataset = self.datasets[name]
                     weight = getattr(self.cfg, f"{name}_weight")
                     weights += [weight] * len(dataset)
-                sampler = WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
+
+                num_nonzero_weights = torch.tensor(weights).nonzero().numel()
+                sampler = WeightedRandomSampler(weights, num_samples=num_nonzero_weights, replacement=True)
                 dataloader = DataLoader(combined_dataset, batch_size=batch_size, sampler=sampler)
             else:
                 # Regular shuffling for single-source training

@@ -35,7 +35,6 @@ trainer:
   lr: 1e-3
   epochs: 200
   batch_size: 32
-  shuffle: True
   patience: 100 # stop training if validation loss does not improve for x subsequent epochs
   patience_threshold: 0.1
 
@@ -49,12 +48,6 @@ trainer:
     batch_size: 32
     threshold: 0.5
 
-tester:
-  batch_size: 32
-  num_workers: 0
-  persistent_workers: False
-  pin_memory: False
-  threshold: 0.5
 
 mode: null # mode is set via CLI override (train or test)
 checkpoint: null # {run_id}/{checkpoint_tag} e.g. 30925325/best

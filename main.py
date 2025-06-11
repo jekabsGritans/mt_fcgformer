@@ -8,7 +8,6 @@ from omegaconf import DictConfig
 import utils.transforms as T
 from datasets import MLFlowDatasetAggregator
 from deploy import deploy_model_from_config
-from eval import Tester
 from train import Trainer
 from utils.misc import is_folder_filename_path
 from utils.mlflow_utils import (configure_mlflow_auth,

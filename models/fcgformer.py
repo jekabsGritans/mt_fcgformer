@@ -165,6 +165,17 @@ class FCGFormerModule(NeuralNetworkModule):
         nn.init.xavier_uniform_(self.head.weight)
         nn.init.zeros_(self.head.bias)
 
+        self._init_weights()
+
+    def _init_weights(self):
+        # Initialize all linear layers EXCEPT head
+        for m in self.modules():
+            if isinstance(m, nn.Linear) and m is not self.head:
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+
     def _create_sinusoidal_embeddings(self, num_positions, dim):
         # Create sinusoidal position embeddings like in the original transformer
         pe = torch.zeros(num_positions, dim)

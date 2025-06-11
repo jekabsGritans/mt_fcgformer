@@ -1,8 +1,17 @@
 # .devcontainer/Dockerfile
 
-# Allow the base image to be passed in via build arg
-ARG BASE_IMAGE=base-image:latest
-FROM ${BASE_IMAGE}
+# Use NVIDIA PyTorch image as base
+FROM nvcr.io/nvidia/pytorch:25.03-py3
+
+# Install any additional system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      build-essential git vim curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python dependencies
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Build args for mapping host UID/GID
 ARG USERNAME=vscode

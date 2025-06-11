@@ -10,7 +10,7 @@ spectrum_dim: 1024
 
 patch_size: 16
 embed_dim: 768
-num_layers: 12
-expansion_factor: 4
-n_heads: 8
+num_layers: 2
+expansion_factor: 2
+n_heads: 4
 dropout_p: 0.1

@@ -76,9 +76,8 @@ class MultiHeadAttention(nn.Module):
         output = self.out(concat)
         return output
 
-
 class TransformerBlock(nn.Module):
-    def __init__(self, embed_dim, expansion_factor=4, n_heads=8):
+    def __init__(self, embed_dim, expansion_factor=4, n_heads=8, dropout_p=0.2):
         super(TransformerBlock, self).__init__()
 
         self.attention = MultiHeadAttention(embed_dim, n_heads)
@@ -87,12 +86,13 @@ class TransformerBlock(nn.Module):
 
         self.feed_forward = nn.Sequential(
             nn.Linear(embed_dim, expansion_factor * embed_dim),
-            nn.ReLU(),
+            nn.GELU(),
+            nn.Dropout(dropout_p),
             nn.Linear(expansion_factor * embed_dim, embed_dim)
         )
 
-        self.dropout1 = nn.Dropout(0.2)
-        self.dropout2 = nn.Dropout(0.2)
+        self.dropout1 = nn.Dropout(dropout_p)
+        self.dropout2 = nn.Dropout(dropout_p)
 
     def forward(self, key, query, value):
         attention_out = self.attention(key, query, value)
@@ -130,9 +130,8 @@ class PatchEmbed(nn.Module):
 class FCGFormerModule(NeuralNetworkModule):
     """Neural network architecture for FCGFormer"""
 
-
     def __init__(self, spectrum_dim: int, fg_target_dim: int, aux_bool_target_dim: int, aux_float_target_dim: int,
-                 patch_size: int, embed_dim: int, num_layers: int, expansion_factor: int, n_heads: int, dropout_p: float):
+                patch_size: int, embed_dim: int, num_layers: int, expansion_factor: int, n_heads: int, dropout_p: float):
         
         super().__init__(spectrum_dim, fg_target_dim, aux_bool_target_dim, aux_float_target_dim)
         
@@ -141,21 +140,39 @@ class FCGFormerModule(NeuralNetworkModule):
             patch_size=patch_size,
             embed_dim=embed_dim,
         )
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.pos_embed = nn.Parameter(torch.zeros(1, 1 + self.patch_embed.n_patches, embed_dim))
+        
+        # 1. Initialize with small random values instead of zeros
+        self.cls_token = nn.Parameter(torch.randn(1, 1, embed_dim) * 0.02)
+        
+        # 2. Create proper sinusoidal position embeddings
+        num_positions = 1 + self.patch_embed.n_patches
+        self.pos_embed = nn.Parameter(
+            self._create_sinusoidal_embeddings(num_positions, embed_dim)
+        )
+        
         self.pos_drop = nn.Dropout(p=dropout_p)
 
+        # 3. Initialize layers with a smaller dropout for early training
         self.layers = nn.ModuleList([
-            TransformerBlock(embed_dim, expansion_factor, n_heads)
+            TransformerBlock(embed_dim, expansion_factor, n_heads, dropout_p=min(0.1, dropout_p * (i+1)/num_layers))
             for i in range(num_layers)
         ])
 
         self.norm = nn.LayerNorm(embed_dim, eps=1e-6)
-
-        # TODO: aux
-        assert aux_bool_target_dim == 0, "aux bool targets not implemented yet"
-        assert aux_float_target_dim == 0, "aux float targets not implemented yet"
+        
+        # 4. Add classification head with proper initialization
         self.head = nn.Linear(embed_dim, fg_target_dim)
+        nn.init.xavier_uniform_(self.head.weight)
+        nn.init.zeros_(self.head.bias)
+
+    def _create_sinusoidal_embeddings(self, num_positions, dim):
+        # Create sinusoidal position embeddings like in the original transformer
+        pe = torch.zeros(num_positions, dim)
+        position = torch.arange(0, num_positions).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, dim, 2) * -(math.log(10000.0) / dim))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term[:dim//2]) # handle odd dimensions
+        return pe.unsqueeze(0)
         
     def forward(self, x):
         n_samples = x.shape[0]

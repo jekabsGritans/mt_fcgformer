@@ -263,6 +263,7 @@ class Trainer:
 
         try:
             for epoch in range(self.cfg.trainer.epochs):
+                self.update_aux_loss_weights(epoch)
                 self.nn.train()
 
                 for batch_idx, batch in enumerate(tqdm(self.train_loader, desc=f"Epoch [{epoch+1}/{self.cfg.trainer.epochs}]")):
@@ -349,3 +350,27 @@ class Trainer:
         # Write metrics to file
         with open(filepath, 'w') as f:
             json.dump(metrics, f)
+
+    def update_aux_loss_weights(self, epoch):
+        """
+        Update auxiliary loss weights with linear decay to zero
+        """
+        # Get total number of epochs and maximum epoch to decay until
+        total_epochs = self.cfg.trainer.epochs
+        
+        # Start with the initial weights from the config
+        initial_aux_bool_weight = self.cfg.trainer.initial_aux_bool_weight
+        initial_aux_float_weight = self.cfg.trainer.initial_aux_float_weight
+        
+        # Calculate linear decay factor (1.0 -> 0.0 over the course of training)
+        decay_factor = max(0.0, 1.0 - epoch / self.cfg.trainer.aux_epochs)
+        
+        # Update the weights
+        self.nn.aux_bool_loss_weight = initial_aux_bool_weight * decay_factor
+        self.nn.aux_float_loss_weight = initial_aux_float_weight * decay_factor
+        
+        # Log current weights to MLflow
+        mlflow.log_metrics({
+            "train/weights/aux_bool": self.nn.aux_bool_loss_weight,
+            "train/weights/aux_float": self.nn.aux_float_loss_weight
+        }, step=epoch)

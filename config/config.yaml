@@ -41,6 +41,10 @@ trainer:
   patience: 100 # stop training if validation loss does not improve for x subsequent epochs
   patience_threshold: 0.1
 
+  initial_aux_bool_weight: 0.5
+  initial_aux_float_weight: 0.001
+  aux_epochs: 100
+
   weight_decay: 0.01
 
   warmup_steps: 2000

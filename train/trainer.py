@@ -5,7 +5,6 @@ from re import A
 import mlflow
 import torch
 from omegaconf import DictConfig
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from datasets import MLFlowDatasetAggregator

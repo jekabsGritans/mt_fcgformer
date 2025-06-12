@@ -1,6 +1,6 @@
 # Models use configs for auto-instantiation of objects, so those have strict structure
 defaults:
-  - model: mt_fcgformer
+  - model: stateful_mt_fcgformer
   - override hydra/hydra_logging: disabled
   - override hydra/job_logging: disabled
   - _self_

@@ -31,9 +31,9 @@ logger = logging.getLogger("optuna_optimization")
 WORKER_ID = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
 
 # Fixed parameters
-MODEL = "mt_fcgformer"
+MODEL = "stateful_mt_fcgformer"
 DATASET_ID = "157d4b53c95f4af88ee86fbcc319bce2"
-EXPERIMENT_NAME = "fcg-hyperparam-search"
+EXPERIMENT_NAME = "stateful_mt_fcg-hyperparam-search"
 MIN_EPOCHS = 5
 
 # Set up Optuna database URL
@@ -41,9 +41,9 @@ load_dotenv()
 OPTUNA_DB_URL = os.getenv("OPTUNA_DB_URL")
 
 # Define search strategy phases
-PHASE1_STUDY_NAME = "fcgformer-phase1-exploration"
-PHASE2_STUDY_NAME = "fcgformer-phase2-exploitation"
-PHASE3_STUDY_NAME = "fcgformer-phase3-validation"
+PHASE1_STUDY_NAME = "stateful_mt_fcgformer-phase1-exploration"
+PHASE2_STUDY_NAME = "stateful_mt_fcgformer-phase2-exploitation"
+PHASE3_STUDY_NAME = "stateful_mt_fcgformer-phase3-validation"
 
 # Global variable to track the current process
 current_process = None

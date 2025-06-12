@@ -1,0 +1,16 @@
+# Metadata
+name: stateful_mt_fcgformer
+
+# Class to construct
+init:
+  _target_: models.stateful_mt_fcgformer.StatefulMultiTokenFCGFormerModule
+
+# hyperparameters
+spectrum_dim: 1024
+
+patch_size: 16
+embed_dim: 768
+num_layers: 2
+expansion_factor: 2
+n_heads: 4
+dropout_p: 0.1

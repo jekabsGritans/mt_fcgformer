@@ -7,10 +7,9 @@ exec > >(tee -a $LOG_FILE) 2>&1
 
 echo "==== Starting Provisioning: $(date) ===="
 
-# Check for required environment variable
-if [ -z "$SSH_PRIVATE_KEY_BASE64" ]; then
-    echo "ERROR: SSH_PRIVATE_KEY_BASE64 environment variable must be provided!"
-    echo "Please provide the base64-encoded private key when launching the instance."
+# need passphrase for SSH key
+if [ -z "$SSH_PASSPHRASE" ]; then
+    echo "ERROR: SSH_PASSPHRASE environment variable must be provided!"
     exit 1
 fi
 
@@ -35,9 +34,17 @@ echo "==== Setting up SSH tunnel ===="
 mkdir -p ~/.ssh/optuna
 chmod 700 ~/.ssh ~/.ssh/optuna
 
-# Decode and store the provided key
-echo "$SSH_PRIVATE_KEY_BASE64" | base64 -d > ~/.ssh/optuna/id_rsa
+echo "Generating SSH key from passphrase..."
+mkdir -p ~/.ssh/optuna
+chmod 700 ~/.ssh/optuna
+
+# Generate a deterministic key using the passphrase as seed
+echo "$SSH_PASSPHRASE" | openssl genpkey -algorithm RSA -out ~/.ssh/optuna/id_rsa -pkeyopt rsa_keygen_bits:4096
 chmod 600 ~/.ssh/optuna/id_rsa
+
+# Generate the public key from the private key
+ssh-keygen -y -f ~/.ssh/optuna/id_rsa > ~/.ssh/optuna/id_rsa.pub
+chmod 644 ~/.ssh/optuna/id_rsa.pub
 
 # SSH connection details (passed as environment variables)
 VPS_HOST=${VPS_HOST:-"138.199.214.167"}

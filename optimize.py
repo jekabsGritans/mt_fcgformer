@@ -108,10 +108,10 @@ def suggest_parameters(trial, phase):
         
         # Model architecture parameters - explore full range
         params["patch_size"] = trial.suggest_categorical("patch_size", [8, 16, 32])
-        params["embed_dim"] = trial.suggest_int("embed_dim", 128, 896, log=True)
+        params["embed_dim"] = trial.suggest_int("embed_dim", 128, 896, log=True, step=8)
         params["num_layers"] = trial.suggest_int("num_layers", 1, 4)
         params["expansion_factor"] = trial.suggest_int("expansion_factor", 1, 4)
-        params["n_heads"] = trial.suggest_int("n_heads", 2, 8)
+        params["n_heads"] = trial.suggest_categorical("n_heads", [2, 4, 8])
         params["dropout_p"] = trial.suggest_float("dropout_p", 0.0, 0.5)
         
         # Augmentation strategy - test different combinations
@@ -154,12 +154,13 @@ def suggest_parameters(trial, phase):
                 params["scheduler_tmult"] = best_tmult
                 
             elif param == "patch_size":
-                # Keep categorical
                 params["patch_size"] = trial.suggest_categorical("patch_size", [8, 16, 32])
                 
             elif param == "embed_dim":
                 best_embed = best_params.get("embed_dim", 512)
-                params["embed_dim"] = trial.suggest_int("embed_dim", int(best_embed * 0.7), int(best_embed * 1.3), log=True)
+                min_rounded = int(best_embed * 0.7 // 8) * 8
+                max_rounded = int(best_embed * 1.3 // 8) * 8
+                params["embed_dim"] = trial.suggest_int("embed_dim", min_rounded, max_rounded, log=True, step=8)
                 
             elif param == "num_layers":
                 best_layers = best_params.get("num_layers", 2)
@@ -170,8 +171,7 @@ def suggest_parameters(trial, phase):
                 params["expansion_factor"] = trial.suggest_int("expansion_factor", max(1, best_exp - 1), best_exp + 1)
                 
             elif param == "n_heads":
-                best_heads = best_params.get("n_heads", 4)
-                params["n_heads"] = trial.suggest_int("n_heads", max(2, best_heads - 2), best_heads + 2)
+                params["n_heads"] = best_params.get("n_heads", 4)
                 
             elif param == "dropout_p":
                 best_drop = best_params.get("dropout_p", 0.1)
@@ -224,7 +224,9 @@ def suggest_parameters(trial, phase):
                 
             elif param == "embed_dim":
                 best_embed = best_params.get("embed_dim", 512)
-                params["embed_dim"] = trial.suggest_int("embed_dim", int(best_embed * 0.9), int(best_embed * 1.1), log=True)
+                min_rounded = int(best_embed * 0.9 // 8) * 8
+                max_rounded = int(best_embed * 1.1 // 8) * 8
+                params["embed_dim"] = trial.suggest_int("embed_dim", min_rounded, max_rounded, log=True, step=8)
                 
             elif param == "num_layers":
                 # Usually fixed in phase 3

@@ -256,7 +256,10 @@ class MLFlowDatasetAggregator:
     def get_loader(self, batch_size: int, generate_masks: bool) -> DataLoader:
         dataset_names = list(self.datasets.keys())
         combined_dataset = ConcatDataset([self.datasets[name] for name in dataset_names])
-
+        
+        # Calculate the total dataset size (this will be our consistent size)
+        total_dataset_size = len(combined_dataset)
+        
         # Use custom collate function for mask generation
         collate_fn = self._collate_with_masks if generate_masks else None
         
@@ -268,9 +271,14 @@ class MLFlowDatasetAggregator:
                     dataset = self.datasets[name]
                     weight = getattr(self.cfg, f"{name}_weight")
                     weights += [weight] * len(dataset)
-
-                num_nonzero_weights = torch.tensor(weights).nonzero().numel()
-                sampler = WeightedRandomSampler(weights, num_samples=num_nonzero_weights, replacement=True)
+                
+                # Create sampler using ALL samples - this maintains consistent epoch size
+                sampler = WeightedRandomSampler(
+                    weights=weights,
+                    num_samples=total_dataset_size,  # Always use full dataset size
+                    replacement=True  # Must be True to allow oversampling
+                )
+                
                 dataloader = DataLoader(
                     combined_dataset, 
                     batch_size=batch_size, 
@@ -290,7 +298,7 @@ class MLFlowDatasetAggregator:
             dataloader = DataLoader(combined_dataset, batch_size=batch_size, shuffle=False)
 
         return dataloader
-    
+        
     def _collate_with_masks(self, batch):
         """Custom collate function that adds random masks to batches"""
         # Standard collation

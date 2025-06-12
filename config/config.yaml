@@ -57,12 +57,13 @@ trainer:
     threshold: 0.5
 
 
-mode: null # mode is set via CLI override (train or test)
+mode: train # mode is set via CLI override (train or test)
 checkpoint: null # {run_id}/{checkpoint_tag} e.g. 30925325/best
 
 device: cuda:0
 runs_path: ./runs
-experiment_name: fcg-detection
+experiment_name: debugg
+model: mt_fcgformer
 
 # only applied to spectrum. tabular inputs aren't transformed. both transformed spectrum and tabular inputs are tokenized in transformer.
 # these are fixed for the most part

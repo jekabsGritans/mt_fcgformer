@@ -104,7 +104,7 @@ def suggest_parameters(trial, phase):
         params["warmup_steps"] = trial.suggest_int("warmup_steps", 500, 8000, log=True)  # Longer warmup
         params["batch_size"] = trial.suggest_categorical('batch_size', [32, 64, 128, 256])
         params["scheduler_t0"] = trial.suggest_int("scheduler_t0", 5, 80)
-        params["scheduler_tmult"] = trial.suggest_float("scheduler_tmult", 1.0, 3.0)
+        params["scheduler_tmult"] = trial.suggest_categorical("scheduler_tmult", [1, 2])
         
         # Model architecture parameters - explore full range
         params["patch_size"] = trial.suggest_categorical("patch_size", [8, 16, 32])
@@ -150,8 +150,8 @@ def suggest_parameters(trial, phase):
                 params["scheduler_t0"] = trial.suggest_int("scheduler_t0", max(5, int(best_t0 * 0.5)), int(best_t0 * 1.5))
                 
             elif param == "scheduler_tmult":
-                best_tmult = best_params.get("scheduler_tmult", 2.0)
-                params["scheduler_tmult"] = trial.suggest_float("scheduler_tmult", max(1.0, best_tmult * 0.7), best_tmult * 1.3)
+                best_tmult = best_params.get("scheduler_tmult", 2)
+                params["scheduler_tmult"] = best_tmult
                 
             elif param == "patch_size":
                 # Keep categorical
@@ -215,8 +215,8 @@ def suggest_parameters(trial, phase):
                 params["scheduler_t0"] = trial.suggest_int("scheduler_t0", max(5, int(best_t0 * 0.8)), int(best_t0 * 1.2))
                 
             elif param == "scheduler_tmult":
-                best_tmult = best_params.get("scheduler_tmult", 2.0)
-                params["scheduler_tmult"] = trial.suggest_float("scheduler_tmult", max(1.0, best_tmult * 0.9), best_tmult * 1.1)
+                best_tmult = best_params.get("scheduler_tmult", 2)
+                params["scheduler_tmult"] = best_tmult
                 
             elif param == "patch_size":
                 # Usually fixed in phase 3

@@ -312,8 +312,12 @@ class MLFlowDatasetAggregator:
         # Create mask tensor (1 = use this label, 0 = mask/unknown)
         mask = torch.ones_like(targets)
         
-        # Choose a random global mask percentage between 50% and 100%
-        global_mask_rate = torch.rand(1).item() * 0.5 + 0.5  # Random between 0.5 and 1.0
+        # Use min and max mask rates from config 
+        min_mask_rate = self.cfg.min_mask_rate
+        max_mask_rate = self.cfg.max_mask_rate
+        
+        # Random mask rate between min and max
+        global_mask_rate = min_mask_rate + torch.rand(1).item() * (max_mask_rate - min_mask_rate)
         min_masks_required = int(total_labels * global_mask_rate)
         
         # Apply class-aware masking strategy

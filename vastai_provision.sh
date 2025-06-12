@@ -60,7 +60,7 @@ EOF
 chmod +x /root/tunnel.sh
 
 # Set up database URL
-export OPTUNA_DB_URL="mysql://$OPTUNA_DB_USER:$OPTUNA_DB_PASSWORD@127.0.0.1:$LOCAL_PORT/optuna"
+export OPTUNA_DB_URL="mysql+pymysql://$OPTUNA_DB_USER:$OPTUNA_DB_PASSWORD@127.0.0.1:$LOCAL_PORT/optuna"
 echo "export OPTUNA_DB_URL=\"$OPTUNA_DB_URL\"" >> /root/.bashrc
 
 # Start tunnel in background

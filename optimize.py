@@ -350,6 +350,7 @@ def objective(trial):
         f"trainer.epochs={300 if phase == 3 else 200 if phase == 2 else 100}",
         f"trainer.patience={200 if phase == 3 else 100 if phase == 2 else 50}",
         f"metric_output_file={metrics_file}",
+        "skip_checkpoints=True"
         
         # Dataset weights
         "nist_weight=1.0",

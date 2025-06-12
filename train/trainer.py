@@ -58,6 +58,9 @@ class Trainer:
         Args:
             tag (str): e.g. "best" results in runs/best_optim.pt and runs/best_model.pt
         """
+        if self.cfg.skip_checkpoints:
+            return
+
         run_id = get_run_id()
 
         local_model_path = os.path.join(self.cfg.runs_path, run_id, f"{tag}_model.pt")

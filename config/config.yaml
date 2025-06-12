@@ -12,6 +12,7 @@ hydra:
 
 # for optuna
 metric_output_file: null
+skip_checkpoints: false
 
 # The MLFlow run id of the dataset
 dataset_id: fb3df43da2284161aee9f043a1a4ab33 # FTIR_original

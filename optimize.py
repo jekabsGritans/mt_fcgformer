@@ -51,7 +51,6 @@ current_process = None
 # Add to optimize.py
 def update_job_status(status, error=None):
     """Report job status to MLflow"""
-    import mlflow
     
     try:
         # Use dedicated experiment for job monitoring

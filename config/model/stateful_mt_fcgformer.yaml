@@ -3,7 +3,7 @@ name: stateful_mt_fcgformer
 
 # Class to construct
 init:
-  _target_: models.stateful_mt_fcgformer.StatefulMultiTokenFCGFormerModule
+  _target_: models.stateful_mt_fcgformer.StatefulMultiTokenFCGFormer
 
 # hyperparameters
 spectrum_dim: 1024

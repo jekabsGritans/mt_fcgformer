@@ -34,7 +34,7 @@ WORKER_ID = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
 MODEL = "stateful_mt_fcgformer"
 DATASET_ID = "157d4b53c95f4af88ee86fbcc319bce2"
 EXPERIMENT_NAME = "stateful_mt_fcg-hyperparam-search"
-MIN_EPOCHS = 5
+MIN_EPOCHS = 2
 
 # Set up Optuna database URL
 load_dotenv()
@@ -101,15 +101,15 @@ def suggest_parameters(trial, phase):
         # Trainer hyperparameters - wide ranges
         params["lr"] = trial.suggest_float("lr", 5e-6, 1e-3, log=True)  # Lower range
         params["weight_decay"] = trial.suggest_float("weight_decay", 1e-4, 3e-1, log=True)  # Higher min
-        params["warmup_steps"] = trial.suggest_int("warmup_steps", 500, 8000, log=True)  # Longer warmup
-        params["batch_size"] = trial.suggest_categorical('batch_size', [32, 64, 128, 256])
-        params["scheduler_t0"] = trial.suggest_int("scheduler_t0", 5, 80)
+        params["warmup_steps"] = trial.suggest_int("warmup_steps", 500, 2000, log=True)  # Longer warmup
+        params["batch_size"] = trial.suggest_categorical('batch_size', [64, 128, 256, 512])
+        params["scheduler_t0"] = trial.suggest_int("scheduler_t0", 3, 30)
         params["scheduler_tmult"] = trial.suggest_categorical("scheduler_tmult", [1, 2])
 
         # Auxiliary loss parameters
         params["initial_aux_bool_weight"] = trial.suggest_float("initial_aux_bool_weight", 0.1, 1.0)
         params["initial_aux_float_weight"] = trial.suggest_float("initial_aux_float_weight", 0.0001, 0.01, log=True)
-        params["aux_epochs"] = trial.suggest_int("aux_epochs", 50, 200)
+        params["aux_epochs"] = trial.suggest_int("aux_epochs", 10, 40)
         
         # Dataset weights (nist_weight always fixed at 1.0 as baseline)
         params["nist_lser_weight"] = trial.suggest_float("nist_lser_weight", 0.0, 0.5)
@@ -147,7 +147,7 @@ def suggest_parameters(trial, phase):
             
             elif param == "batch_size":
                 # Keep categorical but maybe prioritize values near best
-                params["batch_size"] = trial.suggest_categorical('batch_size', [32, 64, 128, 256])
+                params["batch_size"] = trial.suggest_categorical('batch_size', [64, 128, 256, 512])
             
             elif param == "weight_decay":
                 best_wd = best_params.get("weight_decay", 0.01)
@@ -285,7 +285,7 @@ def suggest_parameters(trial, phase):
         for param in top_params:
             if param == "lr":
                 best_lr = best_params.get("lr", 1e-4)
-                params["lr"] = trial.suggest_float("lr", best_lr * 0.7, best_lr * 1.3, log=True)
+                params["lr"] = trial.suggest_float("lr", best_lr * 0.8, best_lr * 1.2, log=True)
             
             elif param == "batch_size":
                 # In validation phase, we might want to fix batch size or try very few options
@@ -507,8 +507,8 @@ def objective(trial):
         f"use_revert={use_revert}",
         
         # Fixed parameters - adjust based on phase
-        f"trainer.epochs={300 if phase == 3 else 200 if phase == 2 else 100}",
-        f"trainer.patience={200 if phase == 3 else 100 if phase == 2 else 50}",
+        f"trainer.epochs={30 if phase == 3 else 20 if phase == 2 else 10}",
+        f"trainer.patience={20 if phase == 3 else 30 if phase == 2 else 40}",
         f"metric_output_file={metrics_file}",
         "skip_checkpoints=True",
         
@@ -543,13 +543,13 @@ def objective(trial):
         no_improvement_count = 0
         
         # Adjust patience and early stopping based on phase
-        early_stop_epochs = 60 if phase == 1 else 100 if phase == 2 else 150
-        patience_threshold = 15 if phase == 1 else 20 if phase == 2 else 30
-        min_f1_threshold = 0.3 if phase == 1 else 0.4 if phase == 2 else 0.5
+        early_stop_epochs = 10 if phase == 1 else 20 if phase == 2 else 30
+        patience_threshold = 5 if phase == 1 else 8 if phase == 2 else 12
+        min_f1_threshold = 0.4 if phase == 1 else 0.5 if phase == 2 else 0.6
 
         
         while current_process.poll() is None:
-            time.sleep(5)  # Check metrics every 5 seconds
+            time.sleep(10)  # Check metrics every 5 seconds
             
             # Check if metrics file exists and read it
             if os.path.exists(metrics_file):
@@ -673,7 +673,7 @@ def get_parameter_importance(study):
         logger.error(f"Error calculating parameter importance: {e}")
         return {}
 
-def run_phase1(n_trials=40):
+def run_phase1(n_trials=30):
     """Phase 1: Wide exploration with per-trial phase advancement check"""
     signal.signal(signal.SIGTERM, handle_sigterm)
     signal.signal(signal.SIGINT, handle_sigterm)
@@ -688,9 +688,9 @@ def run_phase1(n_trials=40):
         direction="maximize",
         sampler=optuna.samplers.RandomSampler(),
         pruner=optuna.pruners.MedianPruner(
-            n_startup_trials=8, 
-            n_warmup_steps=15,
-            interval_steps=2
+            n_startup_trials=5, 
+            n_warmup_steps=10,
+            interval_steps=1
         )
     )
     
@@ -741,7 +741,7 @@ def run_phase1(n_trials=40):
     # If we reach here, something went wrong
     return 0.0, {}, {}
 
-def run_phase2(best_phase1_params, important_params, n_trials=30):
+def run_phase2(best_phase1_params, important_params, n_trials=20):
     """Phase 2: Exploitation with per-trial phase advancement check"""
     signal.signal(signal.SIGTERM, handle_sigterm)
     signal.signal(signal.SIGINT, handle_sigterm)
@@ -757,9 +757,9 @@ def run_phase2(best_phase1_params, important_params, n_trials=30):
         direction="maximize",
         sampler=optuna.samplers.TPESampler(),
         pruner=optuna.pruners.MedianPruner(
-            n_startup_trials=8, 
-            n_warmup_steps=15,
-            interval_steps=2
+            n_startup_trials=5, 
+            n_warmup_steps=10,
+            interval_steps=1
         )
     )
     
@@ -812,7 +812,7 @@ def run_phase2(best_phase1_params, important_params, n_trials=30):
     return 0.0, {}, []
 
 
-def run_phase3(best_phase2_params, top_params, n_trials=15):
+def run_phase3(best_phase2_params, top_params, n_trials=10):
     """Phase 3: Final validation with per-trial phase advancement check"""
     signal.signal(signal.SIGTERM, handle_sigterm)
     signal.signal(signal.SIGINT, handle_sigterm)
@@ -828,9 +828,9 @@ def run_phase3(best_phase2_params, top_params, n_trials=15):
         direction="maximize",
         sampler=optuna.samplers.TPESampler(),
         pruner=optuna.pruners.MedianPruner(
-            n_startup_trials=8, 
-            n_warmup_steps=15,
-            interval_steps=2
+            n_startup_trials=5, 
+            n_warmup_steps=10,
+            interval_steps=1
         )
     )
     
@@ -888,10 +888,10 @@ def get_current_phase():
     if should_skip_to_next_phase(PHASE3_STUDY_NAME, min_trials=5):
         return 3
     # If phase 2 has enough trials, join phase 3
-    elif should_skip_to_next_phase(PHASE2_STUDY_NAME, min_trials=30):
+    elif should_skip_to_next_phase(PHASE2_STUDY_NAME, min_trials=20):
         return 3
     # If phase 1 has enough trials, join phase 2
-    elif should_skip_to_next_phase(PHASE1_STUDY_NAME, min_trials=40):
+    elif should_skip_to_next_phase(PHASE1_STUDY_NAME, min_trials=30):
         return 2
     # Otherwise start from phase 1
     else:
@@ -952,7 +952,7 @@ def main():
             if best_phase2_params and len(top_params) > 0:
                 logger.info(f"Continuing Phase 3 with parameters from Phase 2")
                 update_job_status("running_phase3")
-                phase3_value, final_best_params = run_phase3(best_phase2_params, top_params, n_trials=15)
+                phase3_value, final_best_params = run_phase3(best_phase2_params, top_params, n_trials=10)
                 
                 if final_best_params:
                     logger.info(f"Phase 3 completed with best val_f1={phase3_value:.4f}")
@@ -976,7 +976,7 @@ def main():
                 logger.info(f"Starting at Phase 2 with parameters from Phase 1")
                 update_job_status("running_phase2")
                 phase2_value, best_phase2_params, top_params = run_phase2(
-                    best_phase1_params, important_params, n_trials=30)
+                    best_phase1_params, important_params, n_trials=20)
                 
                 if best_phase2_params and top_params:
                     logger.info(f"Phase 2 completed with best val_f1={phase2_value:.4f}")
@@ -1007,7 +1007,7 @@ def main():
             # Start from Phase 1
             logger.info("Starting from Phase 1")
             update_job_status("running_phase1")
-            phase1_value, best_phase1_params, important_params = run_phase1(n_trials=40)
+            phase1_value, best_phase1_params, important_params = run_phase1(n_trials=30)
             
             if best_phase1_params and important_params:
                 logger.info(f"Phase 1 completed with best val_f1={phase1_value:.4f}")

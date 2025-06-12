@@ -242,26 +242,9 @@ def suggest_parameters(trial, phase):
             elif param == "dropout_p":
                 best_drop = best_params.get("dropout_p", 0.1)
                 params["dropout_p"] = trial.suggest_float("dropout_p", max(0.0, best_drop - 0.05), min(0.5, best_drop + 0.05))
-            
-            # Handle augmentation parameters
-            elif param == "use_noise" or param == "noise_prob" or param == "noise_snr_min" or param == "noise_snr_max":
-                # Keep augmentation settings from phase 2, or refine if specifically identified
-                params["use_noise"] = best_params.get("use_noise", True)
-                if param == "noise_prob":
-                    best_prob = best_params.get("noise_prob", 0.3)
-                    params["noise_prob"] = trial.suggest_float("noise_prob", best_prob * 0.8, min(0.5, best_prob * 1.2))
-            
-            elif param == "use_mask" or param == "mask_prob" or param == "mask_min" or param == "mask_max":
-                params["use_mask"] = best_params.get("use_mask", True)
-                if param == "mask_prob":
-                    best_prob = best_params.get("mask_prob", 0.3)
-                    params["mask_prob"] = trial.suggest_float("mask_prob", best_prob * 0.8, min(0.5, best_prob * 1.2))
-            
-            elif param == "use_shiftud" or param == "shiftud_prob":
-                params["use_shiftud"] = best_params.get("use_shiftud", True)
-                if param == "shiftud_prob":
-                    best_prob = best_params.get("shiftud_prob", 0.3)
-                    params["shiftud_prob"] = trial.suggest_float("shiftud_prob", best_prob * 0.8, min(0.5, best_prob * 1.2))
+        
+        for aug_param in ["use_noise", "use_mask", "use_shiftud", "use_shiftlr", "use_revert"]:
+            params[aug_param] = best_params.get(aug_param, False)
         
         # Set all other parameters to their best values from phase 2
         for param_name, param_value in best_params.items():
@@ -362,51 +345,6 @@ def objective(trial):
         "graphformer_weight=0.0",
         "graphformer_lser_weight=0.0",
     ]
-    
-    # Add transform-specific parameters when enabled
-    if use_noise:
-        noise_prob = trial.suggest_float("noise_prob", 0.1, 0.5) if phase == 1 else params.get("noise_prob", 0.3)
-        noise_snr_min = trial.suggest_int("noise_snr_min", 1, 5) if phase == 1 else params.get("noise_snr_min", 2)
-        noise_snr_max = trial.suggest_int("noise_snr_max", 10, 30) if phase == 1 else params.get("noise_snr_max", 20)
-        cmd.extend([
-            f"noise_prob={noise_prob}",
-            f"noise_snr_min={noise_snr_min}",
-            f"noise_snr_max={noise_snr_max}",
-        ])
-    
-    if use_mask:
-        mask_prob = trial.suggest_float("mask_prob", 0.1, 0.5) if phase == 1 else params.get("mask_prob", 0.3)
-        mask_min = trial.suggest_float("mask_min", 0.01, 0.1) if phase == 1 else params.get("mask_min", 0.01)
-        mask_max = trial.suggest_float("mask_max", 0.1, 0.3) if phase == 1 else params.get("mask_max", 0.15)
-        cmd.extend([
-            f"mask_prob={mask_prob}",
-            f"mask_min={mask_min}",
-            f"mask_max={mask_max}",
-        ])
-    
-    if use_shiftud:
-        shiftud_prob = trial.suggest_float("shiftud_prob", 0.1, 0.5) if phase == 1 else params.get("shiftud_prob", 0.3)
-        shiftud_min = trial.suggest_float("shiftud_min", 0.01, 0.1) if phase == 1 else params.get("shiftud_min", 0.01)
-        shiftud_max = trial.suggest_float("shiftud_max", 0.1, 0.2) if phase == 1 else params.get("shiftud_max", 0.1)
-        cmd.extend([
-            f"shiftud_prob={shiftud_prob}",
-            f"shiftud_min={shiftud_min}",
-            f"shiftud_max={shiftud_max}",
-        ])
-    
-    if use_shiftlr:
-        shiftlr_prob = trial.suggest_float("shiftlr_prob", 0.1, 0.5) if phase == 1 else params.get("shiftlr_prob", 0.3)
-        shiftlr_min = trial.suggest_float("shiftlr_min", 0.01, 0.1) if phase == 1 else params.get("shiftlr_min", 0.01)
-        shiftlr_max = trial.suggest_float("shiftlr_max", 0.1, 0.2) if phase == 1 else params.get("shiftlr_max", 0.1)
-        cmd.extend([
-            f"shiftlr_prob={shiftlr_prob}",
-            f"shiftlr_min={shiftlr_min}",
-            f"shiftlr_max={shiftlr_max}",
-        ])
-    
-    if use_revert:
-        revert_prob = trial.suggest_float("revert_prob", 0.1, 0.5) if phase == 1 else params.get("revert_prob", 0.3)
-        cmd.append(f"revert_prob={revert_prob}")
     
     # Log detailed trial information
     transform_info = f"Transforms: noise={use_noise}, mask={use_mask}, shiftUD={use_shiftud}, shiftLR={use_shiftlr}, revert={use_revert}"

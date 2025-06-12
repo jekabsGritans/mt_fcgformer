@@ -68,20 +68,7 @@ experiment_name: debugg
 # these are fixed for the most part
 # kwargs for auto-instantiation of sequential transformations
 use_noise: true
-noise_prob: 0.3
-noise_snr_min: 2
-noise_snr_max: 20
-
 use_mask: true
-mask_prob: 0.3
-mask_min: 0.01
-mask_max: 0.15
-
 use_shiftud: true
-shiftud_prob: 0.3
-shiftud_min: 0.01
-shiftud_max: 0.1
-
 use_shiftlr: false
-
 use_revert: false

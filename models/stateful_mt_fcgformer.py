@@ -180,12 +180,15 @@ class StatefulMultiTokenFCGFormerModule(NeuralNetworkModule):
         
         # Basic class tokens - one per target functional group
         self.cls_tokens = nn.Parameter(torch.randn(1, fg_target_dim, embed_dim) * 0.02)
+
+        # Add a separate auxiliary token for predicting auxiliary targets
+        self.aux_token = nn.Parameter(torch.randn(1, 1, embed_dim) * 0.02)
         
         # State embeddings for positive, negative, unknown (initialized small)
         self.state_embeddings = nn.Parameter(torch.randn(3, embed_dim) * 0.02)
         
-        # Create sinusoidal position embeddings
-        num_positions = fg_target_dim + self.patch_embed.n_patches
+        # Create sinusoidal position embeddings - note +1 for auxiliary token
+        num_positions = fg_target_dim + 1 + self.patch_embed.n_patches  # +1 for aux token
         self.pos_embed = nn.Parameter(
             self._create_sinusoidal_embeddings(num_positions, embed_dim)
         )
@@ -209,24 +212,22 @@ class StatefulMultiTokenFCGFormerModule(NeuralNetworkModule):
         
         # Project to final logits
         self.head = nn.Linear(embed_dim, 1)
+
+        # Separate head for auxiliary predictions
+        if aux_bool_target_dim > 0 or aux_float_target_dim > 0:
+            self.aux_head = nn.Linear(embed_dim, aux_bool_target_dim + aux_float_target_dim)
+
         
         # Store dimensions for forward pass
         self.fg_target_dim = fg_target_dim
+        self.aux_bool_target_dim = aux_bool_target_dim
+        self.aux_float_target_dim = aux_float_target_dim
         self.embed_dim = embed_dim
         
         self._init_weights()
         self.attention_maps = []
 
     def forward(self, x, label_states=None):
-        """
-        Forward pass with support for partial label information
-        
-        Args:
-            x: Input spectra [batch_size, spectrum_dim]
-            label_states: Tensor of label states [batch_size, fg_target_dim]
-                         0 = unknown, 1 = positive, 2 = negative
-                         If None, all states are treated as unknown
-        """
         n_samples = x.shape[0]
         
         # Apply patch embedding
@@ -236,7 +237,10 @@ class StatefulMultiTokenFCGFormerModule(NeuralNetworkModule):
         # Expand class tokens to batch size
         cls_tokens = self.cls_tokens.expand(n_samples, -1, -1)  # [n_samples, fg_target_dim, embed_dim]
         
-        # Handle label states
+        # Expand auxiliary token to batch size
+        aux_token = self.aux_token.expand(n_samples, -1, -1)  # [n_samples, 1, embed_dim]
+        
+        # Handle label states for FG tokens
         if label_states is not None:
             # Get state embeddings for each token [batch_size, fg_target_dim, embed_dim]
             state_embeds = self.state_embeddings[label_states]
@@ -244,8 +248,8 @@ class StatefulMultiTokenFCGFormerModule(NeuralNetworkModule):
             # Add state embeddings to class tokens
             cls_tokens = cls_tokens + state_embeds
         
-        # Concatenate tokens with patch embeddings
-        embed_out = torch.cat((cls_tokens, embed_out), dim=1)
+        # Concatenate tokens with patch embeddings: first FG tokens, then aux token, then patches
+        embed_out = torch.cat((cls_tokens, aux_token, embed_out), dim=1)
         
         # Add positional encoding
         embed_out = embed_out + self.pos_embed
@@ -263,15 +267,36 @@ class StatefulMultiTokenFCGFormerModule(NeuralNetworkModule):
         # Apply final norm
         embed_out = self.norm(embed_out)
 
-        # Extract only the class tokens
-        cls_tokens_final = embed_out[:, :self.fg_target_dim, :]  # [n_samples, fg_target_dim, embed_dim]
-        cls_tokens_final = self.cls_dropout(cls_tokens_final)
+        # Extract only the class tokens for FG prediction
+        fg_tokens = embed_out[:, :self.fg_target_dim, :]  # [n_samples, fg_target_dim, embed_dim]
+        fg_tokens = self.cls_dropout(fg_tokens)
         
-        # Project each token to a single logit and reshape
-        logits = self.head(cls_tokens_final).squeeze(-1)  # [n_samples, fg_target_dim]
-
-        out = {"fg_logits": logits}
+        # Extract auxiliary token - it's at position right after the FG tokens
+        aux_token = embed_out[:, self.fg_target_dim:self.fg_target_dim+1, :]  # [n_samples, 1, embed_dim]
+        aux_token = self.cls_dropout(aux_token)
+        
+        # Project FG tokens to logits
+        fg_logits = self.head(fg_tokens).squeeze(-1)  # [n_samples, fg_target_dim]
+        
+        # Initialize output dictionary with FG logits
+        out = {"fg_logits": fg_logits}
+        
+        # Process auxiliary predictions if we have any
+        if self.aux_bool_target_dim > 0 or self.aux_float_target_dim > 0:
+            # Project auxiliary token to predictions
+            aux_preds = self.aux_head(aux_token.squeeze(1))  # [n_samples, aux_bool + aux_float]
+            
+            # Split into boolean logits and float predictions
+            if self.aux_bool_target_dim > 0:
+                aux_bool_logits = aux_preds[:, :self.aux_bool_target_dim]
+                out["aux_bool_logits"] = aux_bool_logits
+            
+            if self.aux_float_target_dim > 0:
+                aux_float_preds = aux_preds[:, self.aux_bool_target_dim:]
+                out["aux_float_preds"] = aux_float_preds
+        
         return out
+
 
     def _init_weights(self):
         # Weight initialization
@@ -306,8 +331,9 @@ class StatefulMultiTokenFCGFormerModule(NeuralNetworkModule):
         token_attentions = []
         
         for token_idx in range(self.fg_target_dim):
-            # Get attention from this token to all patches (exclude other tokens)
-            token_attention = attention[:, :, token_idx, self.fg_target_dim:].mean(dim=1)  # Average over heads
+            # Get attention from this token to all patches (exclude other FG tokens and aux token)
+            # Note: patches start after FG tokens + 1 aux token
+            token_attention = attention[:, :, token_idx, (self.fg_target_dim + 1):].mean(dim=1)
             token_attentions.append(token_attention)
             
         return token_attentions
@@ -474,7 +500,7 @@ class StatefulMultiTokenFCGFormer(BaseModel):
 
     def step(self, batch: dict) -> dict:
         """
-        Override step method to handle label states
+        Override step method to handle label states and auxiliary tasks
         """
         spectrum = batch["spectrum"]
         fg_targets = batch["fg_targets"]
@@ -497,20 +523,36 @@ class StatefulMultiTokenFCGFormer(BaseModel):
         out = {}
         fg_logits = preds["fg_logits"]
         
-        # Apply loss only to known labels if mask is provided
-        if "fg_target_mask" in batch:
-            mask = batch["fg_target_mask"]
-            loss_per_element = F.binary_cross_entropy_with_logits(
-                fg_logits, fg_targets.float(), reduction='none'
-            )
-            fg_loss = (loss_per_element * mask).sum() / (mask.sum() + 1e-10)
-        else:
-            fg_loss = F.binary_cross_entropy_with_logits(
-                fg_logits, fg_targets.float()
-            )
-            
+        # Apply loss only to known labels
+        loss_per_element = F.binary_cross_entropy_with_logits(
+            fg_logits, fg_targets.float(), reduction='none'
+        )
+        fg_loss = (loss_per_element * mask).sum() / (mask.sum() + 1e-10)
+                
         out["fg_logits"] = fg_logits
         out["fg_loss"] = fg_loss
-        out["loss"] = fg_loss  # No auxiliary targets in this model
+        
+        # Initialize total loss with functional group loss
+        total_loss = self.fg_loss_weight * fg_loss
+        
+        # Handle auxiliary boolean targets
+        if self.aux_bool_target_dim > 0 and "aux_bool_logits" in preds:
+            aux_bool_targets = batch["aux_bool_targets"]
+            aux_bool_logits = preds["aux_bool_logits"]
+            aux_bool_loss = self.aux_bool_loss_fn(aux_bool_logits, aux_bool_targets.float())
+            out["aux_bool_logits"] = aux_bool_logits
+            out["aux_bool_loss"] = aux_bool_loss
+            total_loss = total_loss + self.aux_bool_loss_weight * aux_bool_loss
+        
+        # Handle auxiliary float targets
+        if self.aux_float_target_dim > 0 and "aux_float_preds" in preds:
+            aux_float_targets = batch["aux_float_targets"]
+            aux_float_preds = preds["aux_float_preds"]
+            aux_float_loss = self.aux_float_loss_fn(aux_float_preds, aux_float_targets.float())
+            out["aux_float_preds"] = aux_float_preds
+            out["aux_float_loss"] = aux_float_loss
+            total_loss = total_loss + self.aux_float_loss_weight * aux_float_loss
+        
+        out["loss"] = total_loss
         
         return out

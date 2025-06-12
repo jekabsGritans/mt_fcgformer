@@ -7,15 +7,15 @@ exec > >(tee -a $LOG_FILE) 2>&1
 
 echo "==== Starting Provisioning: $(date) ===="
 
-# need passphrase for SSH key
-if [ -z "$SSH_PASSPHRASE" ]; then
-    echo "ERROR: SSH_PASSPHRASE environment variable must be provided!"
-    exit 1
+# Check for required environment variable
+if [ -z "$SSH_PASSWORD" ]; then
+ echo "ERROR: SSH_PASSWORD environment variable must be provided!"
+ exit 1
 fi
 
 # Install SSH and other required tools
 apt-get update
-apt-get install -y --no-install-recommends git openssh-client autossh tmux netcat-openbsd
+apt-get install -y --no-install-recommends git openssh-client autossh tmux netcat-openbsd sshpass
 
 # Clone your repository
 mkdir -p /workspace
@@ -34,33 +34,6 @@ echo "==== Setting up SSH tunnel ===="
 mkdir -p ~/.ssh/optuna
 chmod 700 ~/.ssh ~/.ssh/optuna
 
-echo "Generating SSH key from passphrase..."
-mkdir -p ~/.ssh/optuna
-chmod 700 ~/.ssh/optuna
-
-# Generate a deterministic key using the passphrase as seed
-echo "$SSH_PASSPHRASE" | openssl genpkey -algorithm RSA -out ~/.ssh/optuna/id_rsa -pkeyopt rsa_keygen_bits:4096
-chmod 600 ~/.ssh/optuna/id_rsa
-
-# Generate the public key from the private key
-ssh-keygen -y -f ~/.ssh/optuna/id_rsa > ~/.ssh/optuna/id_rsa.pub
-chmod 644 ~/.ssh/optuna/id_rsa.pub
-
-# Verify the key generation was successful
-echo "Verifying SSH key generation..."
-if [ ! -s ~/.ssh/optuna/id_rsa ]; then
-    echo "ERROR: Private key not generated properly!"
-    exit 1
-fi
-
-if [ ! -s ~/.ssh/optuna/id_rsa.pub ]; then
-    echo "ERROR: Public key not generated properly!"
-    exit 1
-fi
-
-echo "Public key for VPS:"
-cat ~/.ssh/optuna/id_rsa.pub
-
 # SSH connection details (passed as environment variables)
 VPS_HOST=${VPS_HOST:-"138.199.214.167"}
 VPS_USER=${VPS_USER:-"optuna-user"}
@@ -76,21 +49,25 @@ OPTUNA_DB_PASSWORD=${OPTUNA_DB_PASSWORD:-"hu4sie2Aiwee"}
 # Create isolated SSH config for the tunnel
 cat > ~/.ssh/optuna/config << EOF
 Host optuna-tunnel
-    HostName $VPS_HOST
-    User $VPS_USER
-    Port $VPS_PORT
-    IdentityFile ~/.ssh/optuna/id_rsa
-    StrictHostKeyChecking no
-    UserKnownHostsFile=/dev/null
+ HostName $VPS_HOST
+ User $VPS_USER
+ Port $VPS_PORT
+ StrictHostKeyChecking no
+ UserKnownHostsFile=/dev/null
 EOF
 chmod 600 ~/.ssh/optuna/config
+
+# Store password in a secure file with restricted permissions
+echo "$SSH_PASSWORD" > ~/.ssh/optuna/password
+chmod 600 ~/.ssh/optuna/password
 
 # Create a script to establish and maintain the SSH tunnel
 cat > /root/start_tunnel.sh << EOF
 #!/bin/bash
 pkill -f "autossh.*optuna-tunnel-process" || true
-# Connect to VPS and forward to the actual database server
-autossh -M 0 -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -L $LOCAL_PORT:$DB_HOST:$DB_PORT -F ~/.ssh/optuna/config optuna-tunnel optuna-tunnel-process
+# Connect to VPS and forward to the actual database server using password
+export AUTOSSH_GATETIME=0
+sshpass -f ~/.ssh/optuna/password autossh -M 0 -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -L $LOCAL_PORT:$DB_HOST:$DB_PORT -F ~/.ssh/optuna/config optuna-tunnel optuna-tunnel-process
 EOF
 chmod +x /root/start_tunnel.sh
 
@@ -110,12 +87,9 @@ nc -zv $VPS_HOST $VPS_PORT
 echo "SSH server version detection:"
 nc -v $VPS_HOST $VPS_PORT < /dev/null
 
-# Try connection with max verbosity
+# Try connection with max verbosity (using password)
 echo "Attempting SSH with maximum verbosity..."
-ssh -vvv -F ~/.ssh/optuna/config -o "ConnectTimeout=10" optuna-tunnel exit
-
-echo "Public key being used:"
-cat ~/.ssh/optuna/id_rsa.pub
+sshpass -f ~/.ssh/optuna/password ssh -vvv -F ~/.ssh/optuna/config -o "ConnectTimeout=10" optuna-tunnel exit
 
 echo "SSH config file:"
 cat ~/.ssh/optuna/config
@@ -135,17 +109,17 @@ ping -c 1 $VPS_HOST || echo "WARNING: VPS host unreachable by ping (may be norma
 
 # Test SSH with increasing verbosity
 echo "Basic SSH test..."
-ssh -F ~/.ssh/optuna/config -o "BatchMode=yes" -o "ConnectTimeout=10" optuna-tunnel exit
+sshpass -f ~/.ssh/optuna/password ssh -F ~/.ssh/optuna/config -o "BatchMode=no" -o "ConnectTimeout=10" optuna-tunnel exit
 if [ $? -ne 0 ]; then
-    echo "Basic SSH test failed, trying with verbose logging..."
-    ssh -v -F ~/.ssh/optuna/config -o "BatchMode=yes" -o "ConnectTimeout=10" optuna-tunnel exit
-    if [ $? -ne 0 ]; then
-        echo "Verbose SSH test failed, trying with more debugging..."
-        ssh -vvv -F ~/.ssh/optuna/config -o "BatchMode=yes" -o "ConnectTimeout=10" optuna-tunnel exit
-        echo "ERROR: SSH connection failed! See debug output above."
-        echo "Run /root/debug_ssh.sh for additional diagnostics"
-        exit 1
-    fi
+ echo "Basic SSH test failed, trying with verbose logging..."
+ sshpass -f ~/.ssh/optuna/password ssh -v -F ~/.ssh/optuna/config -o "BatchMode=no" -o "ConnectTimeout=10" optuna-tunnel exit
+ if [ $? -ne 0 ]; then
+     echo "Verbose SSH test failed, trying with more debugging..."
+     sshpass -f ~/.ssh/optuna/password ssh -vvv -F ~/.ssh/optuna/config -o "BatchMode=no" -o "ConnectTimeout=10" optuna-tunnel exit
+     echo "ERROR: SSH connection failed! See debug output above."
+     echo "Run /root/debug_ssh.sh for additional diagnostics"
+     exit 1
+ fi
 fi
 
 echo "SSH connection successful! Starting tunnel and Optuna..."

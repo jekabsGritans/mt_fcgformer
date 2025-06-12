@@ -1,5 +1,6 @@
 import json
 import os
+from re import A
 
 import mlflow
 import torch
@@ -29,7 +30,11 @@ class Trainer:
             self.nn.parameters(), lr=cfg.trainer.lr, weight_decay=cfg.trainer.weight_decay
         )
 
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer=self.optimizer, T_0=cfg.trainer.scheduler_t0, T_mult=cfg.trainer.scheduler_tmult)
+        # self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer=self.optimizer, T_0=cfg.trainer.scheduler_t0, T_mult=cfg.trainer.scheduler_tmult)
+        # we init scheduler after warmup
+        self.scheduler = None
+        self.warmup_steps = cfg.trainer.warmup_steps
+        self.cosine_first_step = None  # Track when we first apply cosine schedule
 
         self.best_val_loss = float('inf')
 
@@ -259,6 +264,19 @@ class Trainer:
                         warmup_factor = float(total_steps) / float(max(1, self.cfg.trainer.warmup_steps))
                         for param_group in self.optimizer.param_groups:
                             param_group['lr'] = self.cfg.trainer.lr * warmup_factor
+                    else:
+                        if self.scheduler is None:
+                            self.cosine_first_step = total_steps
+                            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+                                optimizer=self.optimizer,
+                                T_0=self.cfg.trainer.scheduler_t0, 
+                                T_mult=self.cfg.trainer.scheduler_tmult,
+                                eta_min=1e-6  # Add a minimum LR to prevent it from going to zero
+                            )
+
+                        cosine_steps = total_steps - self.cosine_first_step # type: ignore
+                        cosine_epochs = cosine_steps / len(self.train_loader)
+                        self.scheduler.step(cosine_epochs) # type: ignore
 
                     batch = dict_to_device(batch, self.cfg.device)
 
@@ -286,9 +304,6 @@ class Trainer:
                             metrics["train/loss/aux_float"] = step_out["aux_float_loss"].item()
                             
                         mlflow.log_metrics(metrics, step=total_steps)
-
-                    if total_steps >= self.cfg.trainer.warmup_steps:  
-                        self.scheduler.step(epoch + batch_idx / len(self.train_loader)) # type: ignore
 
                     total_steps += 1
 

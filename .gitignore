@@ -8,3 +8,5 @@ venv/
 **/*.pyc
 **/.ipynb_checkpoints
 **/tmp/
+**/trials/
+templates/

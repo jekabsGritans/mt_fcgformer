@@ -190,6 +190,7 @@ class MLFlowDatasetAggregator:
     cfg: DictConfig
     dataset_id: str
     split: str
+    mask_rate: float
 
     fg_names: list[str] # names of functional groups
 
@@ -197,6 +198,8 @@ class MLFlowDatasetAggregator:
         self.cfg = cfg
         self.dataset_id = dataset_id
         self.split = split
+
+        self.mask_rate = cfg.mask_rate if split == "train" else 0.0
 
         self.spectrum_transform = spectrum_transform
 
@@ -250,10 +253,13 @@ class MLFlowDatasetAggregator:
                 dataset_name = f"{source_name}_lser" if is_lser else source_name
                 self.datasets[dataset_name] = dataset
         
-    def get_loader(self, batch_size: int) -> DataLoader:
+    def get_loader(self, batch_size: int, generate_masks: bool) -> DataLoader:
         dataset_names = list(self.datasets.keys())
         combined_dataset = ConcatDataset([self.datasets[name] for name in dataset_names])
 
+        # Use custom collate function for mask generation
+        collate_fn = self._collate_with_masks if generate_masks else None
+        
         if self.split == "train":
             if len(dataset_names) > 1:
                 # Weighted sampling for multi-source training
@@ -265,12 +271,90 @@ class MLFlowDatasetAggregator:
 
                 num_nonzero_weights = torch.tensor(weights).nonzero().numel()
                 sampler = WeightedRandomSampler(weights, num_samples=num_nonzero_weights, replacement=True)
-                dataloader = DataLoader(combined_dataset, batch_size=batch_size, sampler=sampler)
+                dataloader = DataLoader(
+                    combined_dataset, 
+                    batch_size=batch_size, 
+                    sampler=sampler,
+                    collate_fn=collate_fn
+                )
             else:
                 # Regular shuffling for single-source training
-                dataloader = DataLoader(combined_dataset, batch_size=batch_size, shuffle=True)
+                dataloader = DataLoader(
+                    combined_dataset, 
+                    batch_size=batch_size, 
+                    shuffle=True,
+                    collate_fn=collate_fn
+                )
         else:
-            # Deterministic order for validation
+            # No masking for validation
             dataloader = DataLoader(combined_dataset, batch_size=batch_size, shuffle=False)
 
         return dataloader
+    
+    def _collate_with_masks(self, batch):
+        """Custom collate function that adds random masks to batches"""
+        # Standard collation
+        collated_batch = torch.utils.data.default_collate(batch)
+        
+        # Add masks to batch
+        targets = collated_batch["fg_targets"]
+        batch_size, num_targets = targets.shape
+        total_labels = batch_size * num_targets
+        
+        # Create mask tensor (1 = use this label, 0 = mask/unknown)
+        mask = torch.ones_like(targets)
+        
+        # Choose a random global mask percentage between 50% and 100%
+        global_mask_rate = torch.rand(1).item() * 0.5 + 0.5  # Random between 0.5 and 1.0
+        min_masks_required = int(total_labels * global_mask_rate)
+        
+        # Apply class-aware masking strategy
+        total_masked = 0
+        
+        # First pass - apply class-aware masking
+        for i in range(num_targets):
+            # Get class distribution for this target
+            positives = targets[:, i].float().mean().item()
+            
+            # Higher base mask rate to get closer to our 50-100% target
+            base_mask_rate = 0.7
+            
+            # Adjust mask rate based on class imbalance
+            # Rare positive classes get masked slightly less often
+            pos_mask_rate = base_mask_rate * min(1.0, positives * 5)
+            neg_mask_rate = base_mask_rate * 1.2  # Mask negatives more aggressively
+            
+            # Create masks for positive and negative examples separately
+            pos_indices = targets[:, i].nonzero().squeeze(-1)
+            neg_indices = (targets[:, i] == 0).nonzero().squeeze(-1)
+            
+            # Randomly mask positive examples
+            if len(pos_indices) > 0:
+                num_pos_to_mask = max(1, int(len(pos_indices) * pos_mask_rate))
+                pos_to_mask = pos_indices[torch.randperm(len(pos_indices))[:num_pos_to_mask]]
+                mask[pos_to_mask, i] = 0
+                total_masked += len(pos_to_mask)
+            
+            # Randomly mask negative examples
+            if len(neg_indices) > 0:
+                num_neg_to_mask = max(1, int(len(neg_indices) * neg_mask_rate))
+                neg_to_mask = neg_indices[torch.randperm(len(neg_indices))[:num_neg_to_mask]]
+                mask[neg_to_mask, i] = 0
+                total_masked += len(neg_to_mask)
+        
+        # If we haven't masked enough labels, mask more randomly
+        if total_masked < min_masks_required:
+            # Create a mask of currently unmasked positions
+            additional_needed = min_masks_required - total_masked
+            unmasked = mask.nonzero()
+            
+            # Randomly select additional positions to mask
+            if len(unmasked) > 0:
+                indices = torch.randperm(len(unmasked))[:min(additional_needed, len(unmasked))]
+                additional_to_mask = unmasked[indices]
+                mask[additional_to_mask[:, 0], additional_to_mask[:, 1]] = 0
+        
+        # Add mask to batch
+        collated_batch["fg_target_mask"] = mask
+        
+        return collated_batch

@@ -23,8 +23,15 @@ class Trainer:
         self.train_agg = train_agg
         self.val_agg = val_agg
 
-        self.train_loader = train_agg.get_loader(batch_size=cfg.trainer.batch_size)
-        self.val_loader = val_agg.get_loader(batch_size=cfg.trainer.batch_size)
+        # Get mask rate from config or use default
+        self.train_loader = train_agg.get_loader(
+            batch_size=cfg.trainer.batch_size,
+            generate_masks=True,
+        )
+        
+        # Validation never uses masks
+        self.val_loader = val_agg.get_loader(batch_size=cfg.trainer.batch_size, generate_masks=False)
+
          
         self.optimizer = torch.optim.AdamW(
             self.nn.parameters(), lr=cfg.trainer.lr, weight_decay=cfg.trainer.weight_decay

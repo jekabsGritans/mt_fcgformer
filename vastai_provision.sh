@@ -90,6 +90,26 @@ echo "Attach to Optuna: tmux attach -t optuna"
 EOF
 chmod +x /root/status.sh
 
+cat > /root/force_stop.sh << 'EOF'
+#!/bin/bash
+echo "Force stopping Optuna..."
+PID=$(pgrep -f "python.*optimize.py")
+if [ -n "$PID" ]; then
+  echo "Sending SIGTERM to process $PID"
+  kill -TERM $PID
+  sleep 2
+  if ps -p $PID > /dev/null; then
+    echo "Process still running, sending SIGKILL"
+    kill -9 $PID
+  else
+    echo "Process terminated successfully"
+  fi
+else
+  echo "No Optuna process found"
+fi
+EOF
+chmod +x /root/force_stop.sh
+
 echo "==== Provisioning Complete ===="
 echo "Optuna is running in a tmux session"
 echo "Check status with: /root/status.sh"

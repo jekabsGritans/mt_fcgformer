@@ -15,7 +15,7 @@ metric_output_file: null
 skip_checkpoints: false
 
 # The MLFlow run id of the dataset
-dataset_id: fb3df43da2284161aee9f043a1a4ab33 # FTIR_original
+dataset_id: 157d4b53c95f4af88ee86fbcc319bce2 # FTIR_original
 dataset_name: null
 fg_names: [alkane, methyl, alkene, alkyne, alcohols, amines, nitriles, aromatics, alkyl halides, esters, ketones, aldehydes, carboxylic acids, ether, acyl halides, amides, nitro]
 aux_bool_names: []

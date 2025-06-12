@@ -32,9 +32,6 @@ chemmotion_lser_weight: 0.1
 graphformer_weight: 0.2
 graphformer_lser_weight: 0.2
 
-# on top of source weight, multiply lser samples by this
-lser_ratio: 0.3
-
 trainer:
   lr: 5e-5
   epochs: 1000

@@ -956,27 +956,76 @@ def cleanup_failed_trials(study_name, db_url, min_value=0.001):
     """Remove trials that failed (returned 0.0 or very low values)"""
     print(f"Cleaning up study: {study_name}")
     
-    # Load the study
-    study = optuna.load_study(study_name=study_name, storage=db_url)
-    
-    # Find failed trials
-    failed_trials = [t for t in study.trials 
-                    if t.state == optuna.trial.TrialState.COMPLETE 
-                    and (t.value is None or t.value < min_value)]
-    
-    print(f"Found {len(failed_trials)} failed trials out of {len(study.trials)} total trials")
-    
-    # Delete them one by one
-    for trial in failed_trials:
-        try:
-            # Access internal API to delete trial
-            study._storage.delete_trial(study._study_id, trial.number)
-            print(f"Deleted trial {trial.number} with value {trial.value}")
-        except Exception as e:
-            print(f"Failed to delete trial {trial.number}: {e}")
-    
-    print(f"Cleanup complete. Remaining trials: {len(study.trials) - len(failed_trials)}")
-
+    try:
+        # Load the study
+        study = optuna.load_study(study_name=study_name, storage=db_url)
+        
+        # Find failed trials
+        failed_trials = [t for t in study.trials 
+                        if t.state == optuna.trial.TrialState.COMPLETE 
+                        and (t.value is None or t.value < min_value)]
+        
+        print(f"Found {len(failed_trials)} failed trials out of {len(study.trials)} total trials")
+        
+        if failed_trials:
+            # Use the Optuna API to create a new study with filtered trials
+            good_trials = [t for t in study.trials 
+                          if t.state == optuna.trial.TrialState.COMPLETE 
+                          and (t.value is not None and t.value >= min_value)]
+            
+            print(f"Keeping {len(good_trials)} good trials")
+            
+            # Create a new study with a temporary name
+            temp_study_name = f"{study_name}_temp_{int(time.time())}"
+            temp_study = optuna.create_study(
+                study_name=temp_study_name,
+                storage=db_url,
+                direction="maximize"
+            )
+            
+            # Copy over good trials
+            for t in good_trials:
+                temp_study.enqueue_trial(t.params)
+            
+            # Make sure the enqueued trials are processed
+            if good_trials:
+                temp_study.optimize(lambda _: 0.0, n_trials=len(good_trials))
+            
+            # Delete the old study
+            optuna.delete_study(study_name=study_name, storage=db_url)
+            
+            # Recreate with the same name
+            new_study = optuna.create_study(
+                study_name=study_name,
+                storage=db_url,
+                direction="maximize"
+            )
+            
+            # Copy trials from temp study
+            for t in temp_study.trials:
+                if t.state == optuna.trial.TrialState.COMPLETE:
+                    new_study.enqueue_trial(t.params)
+                    
+            # Make sure the enqueued trials are processed
+            if temp_study.trials:
+                new_study.optimize(lambda trial: temp_study.trials[trial.number].value, 
+                                  n_trials=len(temp_study.trials))
+            
+            # Delete the temporary study
+            optuna.delete_study(study_name=temp_study_name, storage=db_url)
+            
+            print(f"Cleanup complete. Study recreated with {len(new_study.trials)} good trials")
+        else:
+            print("No failed trials to clean up")
+            
+    except KeyError as e:
+        if "Record does not exist" in str(e):
+            print(f"Study {study_name} does not exist yet. Nothing to clean up.")
+        else:
+            raise
+    except Exception as e:
+        print(f"Error cleaning up study {study_name}: {e}")
+        
 if __name__ == "__main__":
     configure_mlflow_auth()
     cleanup_failed_trials(PHASE1_STUDY_NAME, OPTUNA_DB_URL)

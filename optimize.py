@@ -29,7 +29,7 @@ logger = logging.getLogger("optuna_optimization")
 WORKER_ID = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
 
 # Fixed parameters
-MODEL = "fcgformer"
+MODEL = "mt_fcgformer"
 DATASET_ID = "fb3df43da2284161aee9f043a1a4ab33"
 EXPERIMENT_NAME = "fcg-hyperparam-search"
 MIN_EPOCHS = 5

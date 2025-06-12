@@ -18,6 +18,7 @@ from omegaconf import DictConfig
 
 from models.base_model import BaseModel, NeuralNetworkModule
 from utils.misc import interpolate
+from utils.transform_factory import create_eval_transform
 from utils.transforms import Compose
 
 
@@ -112,7 +113,7 @@ class IrCNN(BaseModel):
 
         self.fg_names = cfg.fg_names
 
-        self.spectrum_eval_transform = Compose.from_hydra(cfg.eval_transforms)
+        self.spectrum_eval_transform = create_eval_transform()
 
         # Initialize the network
         self.nn = IrCNNModule(cfg.model.spectrum_dim,

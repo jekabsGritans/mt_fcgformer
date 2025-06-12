@@ -1,6 +1,19 @@
 import utils.transforms as T
 
 
+def create_eval_transform():
+    """Creates a fixed evaluation transform pipeline"""
+    # Hard-coded signal size for all transforms
+    signal_size = 1024
+    
+    # Always-used transforms
+    normalizer = T.Normalizer(with_std=False)
+    resizer = T.Resizer(signal_size=signal_size)
+    
+    # Compose the evaluation transforms
+    eval_transforms = T.Compose([normalizer, resizer])
+    return eval_transforms
+
 def create_transforms(cfg):
     """Creates transform pipelines based on simplified config parameters"""
     # Hard-coded signal size for all transforms

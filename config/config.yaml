@@ -1,6 +1,6 @@
 # Models use configs for auto-instantiation of objects, so those have strict structure
 defaults:
-  - model: ircnn
+  - model: mt_fcgformer
   - override hydra/hydra_logging: disabled
   - override hydra/job_logging: disabled
   - _self_
@@ -63,7 +63,6 @@ checkpoint: null # {run_id}/{checkpoint_tag} e.g. 30925325/best
 device: cuda:0
 runs_path: ./runs
 experiment_name: debugg
-model: mt_fcgformer
 
 # only applied to spectrum. tabular inputs aren't transformed. both transformed spectrum and tabular inputs are tokenized in transformer.
 # these are fixed for the most part

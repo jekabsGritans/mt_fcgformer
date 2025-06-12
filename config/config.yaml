@@ -10,6 +10,9 @@ hydra:
     dir: .
   output_subdir: null
 
+# for optuna
+metric_output_file: null
+
 # The MLFlow run id of the dataset
 dataset_id: fb3df43da2284161aee9f043a1a4ab33 # FTIR_original
 dataset_name: null
@@ -33,7 +36,7 @@ lser_ratio: 0.3
 
 trainer:
   lr: 5e-5
-  epochs: 200
+  epochs: 1000
   batch_size: 128
   patience: 100 # stop training if validation loss does not improve for x subsequent epochs
   patience_threshold: 0.1
@@ -63,36 +66,21 @@ experiment_name: fcg-detection
 # only applied to spectrum. tabular inputs aren't transformed. both transformed spectrum and tabular inputs are tokenized in transformer.
 # these are fixed for the most part
 # kwargs for auto-instantiation of sequential transformations
-eval_transforms:
-    - _target_: utils.transforms.Normalizer
-      with_std: false
+use_noise: true
+noise_prob: 0.3
+noise_snr_min: 2
+noise_snr_max: 20
 
-    - _target_: utils.transforms.Resizer
-      signal_size: 1024
+use_mask: true
+mask_prob: 0.3
+mask_min: 0.01
+mask_max: 0.15
 
-train_transforms:
-    - _target_: utils.transforms.AddNoise
-      prob: 0.3
-      snr_range: [2, 20]
-      mean_noise: 0.0
+use_shiftud: true
+shiftud_prob: 0.3
+shiftud_min: 0.01
+shiftud_max: 0.1
 
-    # - _target_: utils.transforms.Revert
-    #   prob: 0.3
+use_shiftlr: false
 
-    - _target_: utils.transforms.MaskZeros
-      prob: 0.3
-      mask_p: [0.01, 0.15]
-
-    # - _target_: utils.transforms.ShiftLR
-    #   prob: 0.3
-    #   shift_p: [0.01, 0.1]
-
-    - _target_: utils.transforms.ShiftUD
-      prob: 0.3
-      shift_p: [0.01, 0.1]
-
-    - _target_: utils.transforms.Normalizer
-      with_std: false
-
-    - _target_: utils.transforms.Resizer
-      signal_size: 1024
+use_revert: false

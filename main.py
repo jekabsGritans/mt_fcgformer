@@ -5,13 +5,12 @@ import mlflow
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 
-import utils.transforms as T
 from datasets import MLFlowDatasetAggregator
 from deploy import deploy_model_from_config
 from train import Trainer
-from utils.misc import is_folder_filename_path
 from utils.mlflow_utils import (configure_mlflow_auth,
                                 get_experiment_name_from_run)
+from utils.transform_factory import create_transforms
 
 
 @hydra.main(config_path="config", config_name="config", version_base="1.3")
@@ -19,9 +18,8 @@ def main(cfg: DictConfig):
 
     configure_mlflow_auth()
 
-    # dataset-specific transforms for training and evaluation
-    train_transforms = T.Compose.from_hydra(cfg.train_transforms)
-    eval_transforms = T.Compose.from_hydra(cfg.eval_transforms)
+    # Create transforms using the simplified factory function
+    train_transforms, eval_transforms = create_transforms(cfg)
 
     # init model
     model = instantiate(cfg.model.init, cfg=cfg, _recursive_=False)

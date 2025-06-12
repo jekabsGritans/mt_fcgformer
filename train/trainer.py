@@ -1,3 +1,4 @@
+import json
 import os
 
 import mlflow
@@ -66,7 +67,7 @@ class Trainer:
         torch.save(self.optimizer.state_dict(), local_optim_path)
 
 
-    def validate(self, total_steps: int) -> float:
+    def validate(self, total_steps: int, epoch: int) -> float:
         """
         Validate the model on the validation dataset.
         Reports metrics for functional groups and auxiliary targets if they exist.
@@ -154,15 +155,22 @@ class Trainer:
         
         # Calculate and log functional group metrics
         fg_metrics = compute_metrics(fg_predictions, fg_targets)
-        
-        mlflow_metrics.update({
+
+        overall_val_metrics = {
             "val/fg/accuracy": fg_metrics["overall_accuracy"],
             "val/fg/precision": fg_metrics["overall_precision"],
             "val/fg/recall": fg_metrics["overall_recall"],
             "val/fg/f1": fg_metrics["overall_f1"],
             "val/fg/weighted_f1": fg_metrics["weighted_avg_f1"],
             "val/fg/emr": fg_metrics["exact_match_ratio"],
-        })
+        }
+        
+        mlflow_metrics.update(overall_val_metrics)
+
+        # log overall metrics for optuna
+        metric_output_file = self.cfg.get("metric_output_file")
+        if metric_output_file:
+            self.write_metrics_to_file(overall_val_metrics, filepath=metric_output_file)
         
         # Log per-target metrics for functional groups
         for target_idx, target_name in enumerate(self.cfg.fg_names):
@@ -237,6 +245,7 @@ class Trainer:
         patience = 0
         max_patience = self.cfg.trainer.patience
 
+
         try:
             for epoch in range(self.cfg.trainer.epochs):
                 self.nn.train()
@@ -282,7 +291,7 @@ class Trainer:
 
                 mlflow.log_metric("epoch", epoch + 1, step=total_steps)
 
-                val_loss = self.validate(total_steps=total_steps) 
+                val_loss = self.validate(total_steps=total_steps, epoch=epoch) 
 
                 if val_loss < self.best_val_loss:
                     self.best_val_loss = val_loss
@@ -305,3 +314,13 @@ class Trainer:
                         self.save_checkpoint(f"latest")
         finally:
             upload_sync_artifacts(self.cfg)
+    
+    def write_metrics_to_file(self, metrics: dict, filepath: str):
+        """Write metrics to a JSON file for Optuna to read"""
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        
+        # Write metrics to file
+        with open(filepath, 'w') as f:
+            json.dump(metrics, f)

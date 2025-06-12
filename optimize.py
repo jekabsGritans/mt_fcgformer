@@ -14,6 +14,8 @@ import mlflow
 import optuna
 from dotenv import load_dotenv
 
+from utils.mlflow_utils import configure_mlflow_auth
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -951,4 +953,5 @@ def main():
         update_job_status("error", error=str(e))
         
 if __name__ == "__main__":
+    configure_mlflow_auth()
     main()

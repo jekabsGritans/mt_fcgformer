@@ -8,9 +8,9 @@ exec > >(tee -a $LOG_FILE) 2>&1
 echo "==== Starting Provisioning: $(date) ===="
 
 # Check for required environment variable
-if [ -z "$SSH_PRIVATE_KEY" ]; then
-    echo "ERROR: SSH_PRIVATE_KEY environment variable must be provided!"
-    echo "Please provide the private key when launching the instance."
+if [ -z "$SSH_PRIVATE_KEY_BASE64" ]; then
+    echo "ERROR: SSH_PRIVATE_KEY_BASE64 environment variable must be provided!"
+    echo "Please provide the base64-encoded private key when launching the instance."
     exit 1
 fi
 
@@ -35,8 +35,8 @@ echo "==== Setting up SSH tunnel ===="
 mkdir -p ~/.ssh/optuna
 chmod 700 ~/.ssh ~/.ssh/optuna
 
-# Store the provided key
-echo "$SSH_PRIVATE_KEY" > ~/.ssh/optuna/id_rsa
+# Decode and store the provided key
+echo "$SSH_PRIVATE_KEY_BASE64" | base64 -d > ~/.ssh/optuna/id_rsa
 chmod 600 ~/.ssh/optuna/id_rsa
 
 # SSH connection details (passed as environment variables)
@@ -79,7 +79,7 @@ echo "export OPTUNA_DB_URL=\"$OPTUNA_DB_URL\"" >> /root/.bashrc
 # Test the SSH connection
 echo "==== Testing SSH connection to VPS ===="
 if ! ssh -F ~/.ssh/optuna/config -q -o "BatchMode=yes" -o "ConnectTimeout=10" optuna-tunnel exit 2>/dev/null; then
-    echo "ERROR: SSH connection failed! Please check your VPS_HOST, VPS_USER, and SSH_PRIVATE_KEY."
+    echo "ERROR: SSH connection failed! Please check your VPS_HOST, VPS_USER, and SSH_PRIVATE_KEY_BASE64."
     exit 1
 fi
 

@@ -951,7 +951,35 @@ def main():
         error_trace = traceback.format_exc()
         logger.error(f"Error during optimization: {e}\n{error_trace}")
         update_job_status("error", error=str(e))
-        
+
+def cleanup_failed_trials(study_name, db_url, min_value=0.001):
+    """Remove trials that failed (returned 0.0 or very low values)"""
+    print(f"Cleaning up study: {study_name}")
+    
+    # Load the study
+    study = optuna.load_study(study_name=study_name, storage=db_url)
+    
+    # Find failed trials
+    failed_trials = [t for t in study.trials 
+                    if t.state == optuna.trial.TrialState.COMPLETE 
+                    and (t.value is None or t.value < min_value)]
+    
+    print(f"Found {len(failed_trials)} failed trials out of {len(study.trials)} total trials")
+    
+    # Delete them one by one
+    for trial in failed_trials:
+        try:
+            # Access internal API to delete trial
+            study._storage.delete_trial(study._study_id, trial.number)
+            print(f"Deleted trial {trial.number} with value {trial.value}")
+        except Exception as e:
+            print(f"Failed to delete trial {trial.number}: {e}")
+    
+    print(f"Cleanup complete. Remaining trials: {len(study.trials) - len(failed_trials)}")
+
 if __name__ == "__main__":
     configure_mlflow_auth()
+    cleanup_failed_trials(PHASE1_STUDY_NAME, OPTUNA_DB_URL)
+    cleanup_failed_trials(PHASE2_STUDY_NAME, OPTUNA_DB_URL)
+    cleanup_failed_trials(PHASE3_STUDY_NAME, OPTUNA_DB_URL)
     main()

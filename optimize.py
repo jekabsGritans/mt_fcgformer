@@ -32,7 +32,7 @@ WORKER_ID = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
 
 # Fixed parameters
 MODEL = "mt_fcgformer"
-DATASET_ID = "fb3df43da2284161aee9f043a1a4ab33"
+DATASET_ID = "157d4b53c95f4af88ee86fbcc319bce2"
 EXPERIMENT_NAME = "fcg-hyperparam-search"
 MIN_EPOCHS = 5
 

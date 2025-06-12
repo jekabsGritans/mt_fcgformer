@@ -199,8 +199,6 @@ class MLFlowDatasetAggregator:
         self.dataset_id = dataset_id
         self.split = split
 
-        self.mask_rate = cfg.mask_rate if split == "train" else 0.0
-
         self.spectrum_transform = spectrum_transform
 
         self.datasets = {}

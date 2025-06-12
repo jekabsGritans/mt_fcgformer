@@ -15,7 +15,7 @@ fi
 
 # Install SSH and other required tools
 apt-get update
-apt-get install -y --no-install-recommends git openssh-client autossh tmux
+apt-get install -y --no-install-recommends git openssh-client autossh tmux netcat-openbsd
 
 # Clone your repository
 mkdir -p /workspace
@@ -45,6 +45,21 @@ chmod 600 ~/.ssh/optuna/id_rsa
 # Generate the public key from the private key
 ssh-keygen -y -f ~/.ssh/optuna/id_rsa > ~/.ssh/optuna/id_rsa.pub
 chmod 644 ~/.ssh/optuna/id_rsa.pub
+
+# Verify the key generation was successful
+echo "Verifying SSH key generation..."
+if [ ! -s ~/.ssh/optuna/id_rsa ]; then
+    echo "ERROR: Private key not generated properly!"
+    exit 1
+fi
+
+if [ ! -s ~/.ssh/optuna/id_rsa.pub ]; then
+    echo "ERROR: Public key not generated properly!"
+    exit 1
+fi
+
+echo "Public key for VPS:"
+cat ~/.ssh/optuna/id_rsa.pub
 
 # SSH connection details (passed as environment variables)
 VPS_HOST=${VPS_HOST:-"138.199.214.167"}
@@ -79,15 +94,58 @@ autossh -M 0 -o "ServerAliveInterval 30" -o "ServerAliveCountMax 3" -N -L $LOCAL
 EOF
 chmod +x /root/start_tunnel.sh
 
+# Create a diagnostic script
+cat > /root/debug_ssh.sh << 'EOF'
+#!/bin/bash
+echo "=== SSH CONNECTION DIAGNOSTICS ==="
+echo "Checking network connectivity..."
+VPS_HOST=$(grep HostName ~/.ssh/optuna/config | awk '{print $2}')
+VPS_PORT=$(grep Port ~/.ssh/optuna/config | awk '{print $2}')
+echo "Testing connection to $VPS_HOST:$VPS_PORT..."
+
+# Check if port is open
+nc -zv $VPS_HOST $VPS_PORT
+
+# Check SSH server response
+echo "SSH server version detection:"
+nc -v $VPS_HOST $VPS_PORT < /dev/null
+
+# Try connection with max verbosity
+echo "Attempting SSH with maximum verbosity..."
+ssh -vvv -F ~/.ssh/optuna/config -o "ConnectTimeout=10" optuna-tunnel exit
+
+echo "Public key being used:"
+cat ~/.ssh/optuna/id_rsa.pub
+
+echo "SSH config file:"
+cat ~/.ssh/optuna/config
+
+echo "=== END DIAGNOSTICS ==="
+EOF
+chmod +x /root/debug_ssh.sh
+
 # Export the database URL to use the local port
 export OPTUNA_DB_URL="mysql://$OPTUNA_DB_USER:$OPTUNA_DB_PASSWORD@127.0.0.1:$LOCAL_PORT/optuna"
 echo "export OPTUNA_DB_URL=\"$OPTUNA_DB_URL\"" >> /root/.bashrc
 
-# Test the SSH connection
+# Test the SSH connection with verbose output
 echo "==== Testing SSH connection to VPS ===="
-if ! ssh -F ~/.ssh/optuna/config -q -o "BatchMode=yes" -o "ConnectTimeout=10" optuna-tunnel exit 2>/dev/null; then
-    echo "ERROR: SSH connection failed! Please check your VPS_HOST, VPS_USER, and SSH_PRIVATE_KEY_BASE64."
-    exit 1
+# First try a basic connectivity test
+ping -c 1 $VPS_HOST || echo "WARNING: VPS host unreachable by ping (may be normal if ICMP blocked)"
+
+# Test SSH with increasing verbosity
+echo "Basic SSH test..."
+ssh -F ~/.ssh/optuna/config -o "BatchMode=yes" -o "ConnectTimeout=10" optuna-tunnel exit
+if [ $? -ne 0 ]; then
+    echo "Basic SSH test failed, trying with verbose logging..."
+    ssh -v -F ~/.ssh/optuna/config -o "BatchMode=yes" -o "ConnectTimeout=10" optuna-tunnel exit
+    if [ $? -ne 0 ]; then
+        echo "Verbose SSH test failed, trying with more debugging..."
+        ssh -vvv -F ~/.ssh/optuna/config -o "BatchMode=yes" -o "ConnectTimeout=10" optuna-tunnel exit
+        echo "ERROR: SSH connection failed! See debug output above."
+        echo "Run /root/debug_ssh.sh for additional diagnostics"
+        exit 1
+    fi
 fi
 
 echo "SSH connection successful! Starting tunnel and Optuna..."
@@ -122,3 +180,4 @@ echo "SSH tunnel established to $VPS_HOST:$VPS_PORT forwarding localhost:$LOCAL_
 echo "Database URL: $OPTUNA_DB_URL"
 echo "To check tunnel status: /root/check_tunnel.sh"
 echo "To attach to Optuna session: /root/attach_optuna.sh"
+echo "If you have SSH issues, run: /root/debug_ssh.sh"

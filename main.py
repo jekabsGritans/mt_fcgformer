@@ -28,6 +28,7 @@ def main(cfg: DictConfig):
     assert cfg.mode in ["train", "deploy"], f"Invalid mode: {cfg.mode}. Must be one of ['train', 'deploy']"
 
     # start MLflow run
+    print(f"MLflow tracking URI: {mlflow.get_tracking_uri()}")
     mlflow.set_experiment(cfg.experiment_name)
 
     # mode_model_dataset_timestamp

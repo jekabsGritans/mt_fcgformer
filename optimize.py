@@ -301,7 +301,7 @@ def objective(trial):
     
     # Build command with base parameters
     cmd = [
-        "python", "main.py",
+        sys.executable, "main.py",
         "mode=train",
         "device=cuda:0",
         f"experiment_name={EXPERIMENT_NAME}_phase{phase}",

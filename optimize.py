@@ -105,6 +105,18 @@ def suggest_parameters(trial, phase):
         params["batch_size"] = trial.suggest_categorical('batch_size', [32, 64, 128, 256])
         params["scheduler_t0"] = trial.suggest_int("scheduler_t0", 5, 80)
         params["scheduler_tmult"] = trial.suggest_categorical("scheduler_tmult", [1, 2])
+
+        # Auxiliary loss parameters
+        params["initial_aux_bool_weight"] = trial.suggest_float("initial_aux_bool_weight", 0.1, 1.0)
+        params["initial_aux_float_weight"] = trial.suggest_float("initial_aux_float_weight", 0.0001, 0.01, log=True)
+        params["aux_epochs"] = trial.suggest_int("aux_epochs", 50, 200)
+        
+        # Dataset weights (nist_weight always fixed at 1.0 as baseline)
+        params["nist_lser_weight"] = trial.suggest_float("nist_lser_weight", 0.0, 0.5)
+        params["chemmotion_weight"] = trial.suggest_float("chemmotion_weight", 0.0, 1.0)
+        params["chemmotion_lser_weight"] = trial.suggest_float("chemmotion_lser_weight", 0.0, 0.3)
+        params["graphformer_weight"] = trial.suggest_float("graphformer_weight", 0.0, 0.5)
+        params["graphformer_lser_weight"] = trial.suggest_float("graphformer_lser_weight", 0.0, 0.5)
         
         # Model architecture parameters - explore full range
         params["patch_size"] = trial.suggest_categorical("patch_size", [8, 16, 32])
@@ -176,6 +188,83 @@ def suggest_parameters(trial, phase):
             elif param == "dropout_p":
                 best_drop = best_params.get("dropout_p", 0.1)
                 params["dropout_p"] = trial.suggest_float("dropout_p", max(0.0, best_drop - 0.1), min(0.5, best_drop + 0.1))
+
+            # Auxiliary loss parameters
+            elif param == "initial_aux_bool_weight":
+                best_weight = best_params.get("initial_aux_bool_weight", 0.5)
+                params["initial_aux_bool_weight"] = trial.suggest_float(
+                    "initial_aux_bool_weight", 
+                    max(0.05, best_weight * 0.5), 
+                    min(1.0, best_weight * 1.5)
+                )
+                
+            elif param == "initial_aux_float_weight":
+                best_weight = best_params.get("initial_aux_float_weight", 0.001)
+                params["initial_aux_float_weight"] = trial.suggest_float(
+                    "initial_aux_float_weight", 
+                    best_weight * 0.5, 
+                    best_weight * 2.0, 
+                    log=True
+                )
+                
+            elif param == "aux_epochs":
+                best_epochs = best_params.get("aux_epochs", 100)
+                params["aux_epochs"] = trial.suggest_int(
+                    "aux_epochs", 
+                    max(20, int(best_epochs * 0.7)), 
+                    int(best_epochs * 1.3)
+                )
+                
+            # Dataset weights
+            elif param == "nist_lser_weight":
+                best_weight = best_params.get("nist_lser_weight", 0.2)
+                params["nist_lser_weight"] = trial.suggest_float(
+                    "nist_lser_weight", 
+                    max(0.0, best_weight - 0.1), 
+                    min(0.6, best_weight + 0.1)
+                )
+                
+            elif param == "chemmotion_weight":
+                best_weight = best_params.get("chemmotion_weight", 0.5)
+                params["chemmotion_weight"] = trial.suggest_float(
+                    "chemmotion_weight", 
+                    max(0.0, best_weight - 0.2), 
+                    min(1.0, best_weight + 0.2)
+                )
+                
+            elif param == "chemmotion_lser_weight":
+                best_weight = best_params.get("chemmotion_lser_weight", 0.1)
+                params["chemmotion_lser_weight"] = trial.suggest_float(
+                    "chemmotion_lser_weight", 
+                    max(0.0, best_weight - 0.1), 
+                    min(0.4, best_weight + 0.1)
+                )
+                
+            elif param == "graphformer_weight":
+                best_weight = best_params.get("graphformer_weight", 0.2)
+                params["graphformer_weight"] = trial.suggest_float(
+                    "graphformer_weight", 
+                    max(0.0, best_weight - 0.1), 
+                    min(0.6, best_weight + 0.1)
+                )
+                
+            elif param == "graphformer_lser_weight":
+                best_weight = best_params.get("graphformer_lser_weight", 0.2)
+                params["graphformer_lser_weight"] = trial.suggest_float(
+                    "graphformer_lser_weight", 
+                    max(0.0, best_weight - 0.1), 
+                    min(0.6, best_weight + 0.1)
+                )
+        
+        # For parameters not explicitly chosen, fill with best values from phase 1
+        aux_loss_params = ["initial_aux_bool_weight", "initial_aux_float_weight", "aux_epochs"]
+        dataset_weight_params = ["nist_lser_weight", "chemmotion_weight", "chemmotion_lser_weight", 
+                                 "graphformer_weight", "graphformer_lser_weight"]
+        
+        for param in aux_loss_params + dataset_weight_params:
+            if param not in params and param in best_params:
+                params[param] = best_params[param]
+
                 
         # For augmentation parameters, keep the best configuration from phase 1
         for aug_param in ["use_noise", "use_mask", "use_shiftud", "use_shiftlr", "use_revert"]:
@@ -243,6 +332,73 @@ def suggest_parameters(trial, phase):
             elif param == "dropout_p":
                 best_drop = best_params.get("dropout_p", 0.1)
                 params["dropout_p"] = trial.suggest_float("dropout_p", max(0.0, best_drop - 0.05), min(0.5, best_drop + 0.05))
+
+            elif param == "initial_aux_bool_weight":
+                best_weight = best_params.get("initial_aux_bool_weight", 0.5)
+                params["initial_aux_bool_weight"] = trial.suggest_float(
+                    "initial_aux_bool_weight", 
+                    max(0.05, best_weight * 0.8), 
+                    min(1.0, best_weight * 1.2)
+                )
+            
+            elif param == "initial_aux_float_weight":
+                best_weight = best_params.get("initial_aux_float_weight", 0.001)
+                params["initial_aux_float_weight"] = trial.suggest_float(
+                    "initial_aux_float_weight", 
+                    best_weight * 0.7, 
+                    best_weight * 1.3, 
+                    log=True
+                )
+    
+            elif param == "aux_epochs":
+                best_epochs = best_params.get("aux_epochs", 100)
+                params["aux_epochs"] = trial.suggest_int(
+                    "aux_epochs", 
+                    max(20, int(best_epochs * 0.9)), 
+                    int(best_epochs * 1.1)
+                )
+                
+            # Dataset weights
+            elif param == "nist_lser_weight":
+                best_weight = best_params.get("nist_lser_weight", 0.2)
+                params["nist_lser_weight"] = trial.suggest_float(
+                    "nist_lser_weight", 
+                    max(0.0, best_weight - 0.05), 
+                    min(0.6, best_weight + 0.05)
+                )
+                
+            elif param == "chemmotion_weight":
+                best_weight = best_params.get("chemmotion_weight", 0.5)
+                params["chemmotion_weight"] = trial.suggest_float(
+                    "chemmotion_weight", 
+                    max(0.0, best_weight - 0.1), 
+                    min(1.0, best_weight + 0.1)
+                )
+                
+            elif param == "chemmotion_lser_weight":
+                best_weight = best_params.get("chemmotion_lser_weight", 0.1)
+                params["chemmotion_lser_weight"] = trial.suggest_float(
+                    "chemmotion_lser_weight", 
+                    max(0.0, best_weight - 0.05), 
+                    min(0.4, best_weight + 0.05)
+                )
+                
+            elif param == "graphformer_weight":
+                best_weight = best_params.get("graphformer_weight", 0.2)
+                params["graphformer_weight"] = trial.suggest_float(
+                    "graphformer_weight", 
+                    max(0.0, best_weight - 0.05), 
+                    min(0.6, best_weight + 0.05)
+                )
+            
+            elif param == "graphformer_lser_weight":
+                best_weight = best_params.get("graphformer_lser_weight", 0.2)
+                params["graphformer_lser_weight"] = trial.suggest_float(
+                    "graphformer_lser_weight", 
+                    max(0.0, best_weight - 0.05), 
+                    min(0.6, best_weight + 0.05)
+                )
+
         
         for aug_param in ["use_noise", "use_mask", "use_shiftud", "use_shiftlr", "use_revert"]:
             params[aug_param] = best_params.get(aug_param, False)
@@ -293,6 +449,19 @@ def objective(trial):
     use_shiftud = params["use_shiftud"]
     use_shiftlr = params["use_shiftlr"]
     use_revert = params["use_revert"]
+
+    # Extract auxiliary loss parameters if they exist
+    initial_aux_bool_weight = params["initial_aux_bool_weight"]
+    initial_aux_float_weight = params["initial_aux_float_weight"]
+    aux_epochs = params["aux_epochs"]
+    
+    # Extract dataset weights
+    nist_lser_weight = params["nist_lser_weight"]
+    chemmotion_weight = params["chemmotion_weight"]
+    chemmotion_lser_weight = params["chemmotion_lser_weight"]
+    graphformer_weight = params["graphformer_weight"]
+    graphformer_lser_weight = params["graphformer_lser_weight"]
+
     
     # Create a unique directory for this trial's files
     trial_metrics_dir = os.path.join("./trials", f"phase{phase}_trial_{trial.number}")
@@ -317,6 +486,11 @@ def objective(trial):
         f"trainer.scheduler_t0={scheduler_t0}",
         f"trainer.scheduler_tmult={scheduler_tmult}",
         
+        # Auxiliary loss parameters
+        f"trainer.initial_aux_bool_weight={initial_aux_bool_weight}",
+        f"trainer.initial_aux_float_weight={initial_aux_float_weight}",
+        f"trainer.aux_epochs={aux_epochs}",
+        
         # Model params
         f"model.patch_size={patch_size}",
         f"model.embed_dim={embed_dim}",
@@ -339,13 +513,14 @@ def objective(trial):
         "skip_checkpoints=True",
         
         # Dataset weights
-        "nist_weight=1.0",
-        "nist_lser_weight=0.0",
-        "chemmotion_weight=0.0",
-        "chemmotion_lser_weight=0.0",
-        "graphformer_weight=0.0",
-        "graphformer_lser_weight=0.0",
+        "nist_weight=1.0",  # Always fixed at 1.0
+        f"nist_lser_weight={nist_lser_weight}",
+        f"chemmotion_weight={chemmotion_weight}",
+        f"chemmotion_lser_weight={chemmotion_lser_weight}",
+        f"graphformer_weight={graphformer_weight}",
+        f"graphformer_lser_weight={graphformer_lser_weight}",
     ]
+    
     
     # Log detailed trial information
     transform_info = f"Transforms: noise={use_noise}, mask={use_mask}, shiftUD={use_shiftud}, shiftLR={use_shiftlr}, revert={use_revert}"

@@ -15,7 +15,7 @@ fi
 
 # Install required tools
 apt-get update
-apt-get install -y --no-install-recommends git openssh-client autossh tmux sshpass
+apt-get install -y --no-install-recommends git openssh-client autossh tmux sshpass ranger
 
 # Clone repository
 mkdir -p /workspace

@@ -16,6 +16,20 @@ from dotenv import load_dotenv
 
 from utils.mlflow_utils import configure_mlflow_auth
 
+# ===== OVERRIDE FLAGS FOR DEBUGGING =====
+# Set to True to force specific parts of the model off
+DISABLE_AUX_LOSS = True       # Set all aux loss weights to 0
+FORCE_MASK_RATE = 1.0         # Set to a value between 0.0-1.0 to force a specific mask rate
+                               # or None to use Optuna's suggestion
+
+# Dataset override flags
+DISABLE_NIST_LSER = True      # Force nist_lser_weight to 0
+DISABLE_CHEMMOTION = True     # Force chemmotion_weight to 0
+DISABLE_CHEMMOTION_LSER = True # Force chemmotion_lser_weight to 0
+DISABLE_GRAPHFORMER = True    # Force graphformer_weight to 0
+DISABLE_GRAPHFORMER_LSER = True # Force graphformer_lser_weight to 0
+
+
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -428,6 +442,33 @@ def objective(trial):
     
     # Get parameters for current phase
     params = suggest_parameters(trial, phase)
+
+    # ===== APPLY DEBUGGING OVERRIDES =====
+    if DISABLE_AUX_LOSS:
+        params["initial_aux_bool_weight"] = 0.0
+        params["initial_aux_float_weight"] = 0.0
+        logger.info("OVERRIDE: Auxiliary loss disabled")
+        
+    if DISABLE_NIST_LSER:
+        params["nist_lser_weight"] = 0.0
+        logger.info("OVERRIDE: NIST LSER dataset disabled")
+        
+    if DISABLE_CHEMMOTION:
+        params["chemmotion_weight"] = 0.0
+        logger.info("OVERRIDE: ChemMotion dataset disabled")
+        
+    if DISABLE_CHEMMOTION_LSER:
+        params["chemmotion_lser_weight"] = 0.0
+        logger.info("OVERRIDE: ChemMotion LSER dataset disabled")
+        
+    if DISABLE_GRAPHFORMER:
+        params["graphformer_weight"] = 0.0
+        logger.info("OVERRIDE: Graphformer dataset disabled")
+        
+    if DISABLE_GRAPHFORMER_LSER:
+        params["graphformer_lser_weight"] = 0.0
+        logger.info("OVERRIDE: Graphformer LSER dataset disabled")
+
     
     # Extract individual parameters
     lr = params["lr"]
@@ -519,6 +560,9 @@ def objective(trial):
         f"chemmotion_lser_weight={chemmotion_lser_weight}",
         f"graphformer_weight={graphformer_weight}",
         f"graphformer_lser_weight={graphformer_lser_weight}",
+
+        *([f"min_mask_rate={FORCE_MASK_RATE}"] if FORCE_MASK_RATE is not None else []),
+        *([f"max_mask_rate={FORCE_MASK_RATE}"] if FORCE_MASK_RATE is not None else []),
     ]
     
     

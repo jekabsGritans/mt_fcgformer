@@ -64,7 +64,6 @@ def get_experiment_name_from_run(run_id: str) -> str:
     return experiment.name
 
 
-
 def configure_mlflow_auth():
     """
     Configure MLflow authentication using environment variables.
@@ -75,10 +74,16 @@ def configure_mlflow_auth():
     username = os.getenv("MLFLOW_TRACKING_USERNAME")
     password = os.getenv("MLFLOW_TRACKING_PASSWORD")
     
+    # Check if authentication is already in the URI
+    parsed_uri = urllib.parse.urlparse(tracking_uri)
+    if parsed_uri.username or '@' in parsed_uri.netloc:
+        # Auth already present, don't modify
+        mlflow.set_tracking_uri(tracking_uri)
+        return
+        
     # If credentials are provided, add them to the tracking URI
     if username and password:
         # Parse the tracking URI to add authentication
-        parsed_uri = urllib.parse.urlparse(tracking_uri)
         
         # Only add auth for http/https URLs
         if parsed_uri.scheme in ('http', 'https'):

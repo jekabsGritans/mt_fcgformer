@@ -3,7 +3,7 @@ name: mt_fcgformer_learn
 
 # Class to construct
 init:
-  _target_: models.mt_fcgformer.MultiTokenFCGFormerLearn
+  _target_: models.mt_fcgformer_learn.MultiTokenFCGFormerLearn
 
 # hyperparameters
 spectrum_dim: 1024

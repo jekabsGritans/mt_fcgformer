@@ -32,7 +32,7 @@ logger = logging.getLogger("optuna_optimization")
 WORKER_ID = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
 
 # Base configuration - central point for derived names
-BASE_NAME = "mt_debug_aux"
+BASE_NAME = "mt_final"
 MODEL_NAME = "mt_fcgformer"  # Model architecture name
 DATASET_ID = "157d4b53c95f4af88ee86fbcc319bce2"
 

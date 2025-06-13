@@ -25,7 +25,7 @@ def suggest_parameters_phase1(trial):
     # Auxiliary loss parameters
     params["initial_aux_bool_weight"] = trial.suggest_float("initial_aux_bool_weight", 0.01, 1.0, log=True)
     params["initial_aux_float_weight"] = trial.suggest_float("initial_aux_float_weight", 0.0001, 0.01, log=True)
-    params["aux_epochs"] = trial.suggest_int("aux_epochs", 10, 40)
+    params["aux_epochs"] = trial.suggest_int("aux_epochs", 2, 10)
     
     # Dataset weights (nist_weight always fixed at 1.0 as baseline)
     params["nist_lser_weight"] = trial.suggest_float("nist_lser_weight", 0.0, 0.5)
@@ -155,7 +155,7 @@ def suggest_param_phase2(trial, param, best_params, params):
         best_epochs = best_params.get("aux_epochs")
         params["aux_epochs"] = trial.suggest_int(
             "aux_epochs", 
-            max(20, int(best_epochs * 0.7)), 
+            max(2, int(best_epochs * 0.7)), 
             int(best_epochs * 1.3)
         )
         
@@ -295,7 +295,7 @@ def suggest_param_phase3(trial, param, best_params, params):
         best_epochs = best_params.get("aux_epochs")
         params["aux_epochs"] = trial.suggest_int(
             "aux_epochs", 
-            max(20, int(best_epochs * 0.9)), 
+            max(2, int(best_epochs * 0.9)), 
             int(best_epochs * 1.1)
         )
         

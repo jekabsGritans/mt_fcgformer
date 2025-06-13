@@ -57,7 +57,7 @@ model:
 
 trainer:
   lr: 0.0006779437795864471
-  epochs: 200
+  epochs: 100
   batch_size: 128
   patience: 100
   patience_threshold: 0.1

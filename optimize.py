@@ -18,16 +18,16 @@ from utils.mlflow_utils import configure_mlflow_auth
 
 # ===== OVERRIDE FLAGS FOR DEBUGGING =====
 # Set to True to force specific parts of the model off
-DISABLE_AUX_LOSS = True       # Set all aux loss weights to 0
-FORCE_MASK_RATE = 1.0         # Set to a value between 0.0-1.0 to force a specific mask rate
+DISABLE_AUX_LOSS = False       # Set all aux loss weights to 0
+FORCE_MASK_RATE = 0         # Set to a value between 0.0-1.0 to force a specific mask rate
                                # or None to use Optuna's suggestion
 
 # Dataset override flags
-DISABLE_NIST_LSER = True      # Force nist_lser_weight to 0
-DISABLE_CHEMMOTION = True     # Force chemmotion_weight to 0
-DISABLE_CHEMMOTION_LSER = True # Force chemmotion_lser_weight to 0
-DISABLE_GRAPHFORMER = True    # Force graphformer_weight to 0
-DISABLE_GRAPHFORMER_LSER = True # Force graphformer_lser_weight to 0
+DISABLE_NIST_LSER = False      # Force nist_lser_weight to 0
+DISABLE_CHEMMOTION = False     # Force chemmotion_weight to 0
+DISABLE_CHEMMOTION_LSER = False # Force chemmotion_lser_weight to 0
+DISABLE_GRAPHFORMER = False    # Force graphformer_weight to 0
+DISABLE_GRAPHFORMER_LSER = False # Force graphformer_lser_weight to 0
 
 
 # Setup logging
@@ -45,9 +45,9 @@ logger = logging.getLogger("optuna_optimization")
 WORKER_ID = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
 
 # Fixed parameters
-MODEL = "stateful_mt_fcgformer"
+MODEL = "mt_fcgformer"
 DATASET_ID = "157d4b53c95f4af88ee86fbcc319bce2"
-EXPERIMENT_NAME = "stateful_mt_fcg-hyperparam-search"
+EXPERIMENT_NAME = "bigdata_mt_fcg-hyperparam-search"
 MIN_EPOCHS = 2
 
 # Set up Optuna database URL

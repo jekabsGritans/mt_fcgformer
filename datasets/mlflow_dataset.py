@@ -251,15 +251,12 @@ class MLFlowDatasetAggregator:
                 dataset_name = f"{source_name}_lser" if is_lser else source_name
                 self.datasets[dataset_name] = dataset
         
-    def get_loader(self, batch_size: int, generate_masks: bool) -> DataLoader:
+    def get_loader(self, batch_size: int) -> DataLoader:
         dataset_names = list(self.datasets.keys())
         combined_dataset = ConcatDataset([self.datasets[name] for name in dataset_names])
         
         # Calculate the total dataset size (this will be our consistent size)
         total_dataset_size = len(combined_dataset)
-        
-        # Use custom collate function for mask generation
-        collate_fn = self._collate_with_masks_gpu if generate_masks else None
         
         if self.split == "train":
             if len(dataset_names) > 1:
@@ -267,7 +264,7 @@ class MLFlowDatasetAggregator:
                 weights = []
                 for name in dataset_names:
                     dataset = self.datasets[name]
-                    weight = getattr(self.cfg, f"{name}_weight")
+                    weight = getattr(self.cfg, f"{name}_weight", 0.0)
                     weights += [weight] * len(dataset)
                 
                 # Create sampler using ALL samples - this maintains consistent epoch size
@@ -279,73 +276,25 @@ class MLFlowDatasetAggregator:
                 
                 dataloader = DataLoader(
                     combined_dataset, 
-                    batch_size=batch_size, 
+                    batch_size=batch_size,
                     sampler=sampler,
-                    collate_fn=collate_fn
+                    pin_memory=True
                 )
             else:
                 # Regular shuffling for single-source training
                 dataloader = DataLoader(
                     combined_dataset, 
-                    batch_size=batch_size, 
+                    batch_size=batch_size,
                     shuffle=True,
-                    collate_fn=collate_fn
+                    pin_memory=True
                 )
         else:
-            # No masking for validation
-            dataloader = DataLoader(combined_dataset, batch_size=batch_size, shuffle=False)
+            # Validation loader
+            dataloader = DataLoader(
+                combined_dataset, 
+                batch_size=batch_size, 
+                shuffle=False,
+                pin_memory=True
+            )
 
         return dataloader
-        
-
-    def _collate_with_masks_gpu(self, batch):
-        """GPU-optimized mask generation"""
-        # Standard collation
-        collated_batch = torch.utils.data.default_collate(batch)
-        
-        # Get targets and move to GPU if not already there
-        targets = collated_batch["fg_targets"]
-        device = targets.device
-        
-        batch_size, num_targets = targets.shape
-        
-        # Create mask tensor on GPU
-        mask = torch.ones_like(targets, device=device)
-        
-        # Get mask rates
-        min_mask_rate = torch.tensor(self.cfg.min_mask_rate, device=device)
-        max_mask_rate = torch.tensor(self.cfg.max_mask_rate, device=device)
-        
-        # Random mask rate (on GPU)
-        global_mask_rate = min_mask_rate + torch.rand(1, device=device) * (max_mask_rate - min_mask_rate)
-        min_masks_required = int((batch_size * num_targets * global_mask_rate).item())
-        
-        # Create one large mask tensor - more vectorized
-        flat_targets = targets.view(-1)
-        flat_mask = mask.view(-1)
-        
-        # Get positions of positive and negative examples
-        pos_positions = torch.nonzero(flat_targets, as_tuple=True)[0]
-        neg_positions = torch.nonzero(flat_targets == 0, as_tuple=True)[0]
-        
-        # Compute number to mask based on ratios
-        pos_ratio = pos_positions.numel() / flat_targets.numel()
-        num_pos_to_mask = min(
-            pos_positions.numel(),
-            int(min_masks_required * min(1.0, pos_ratio * 3))
-        )
-        num_neg_to_mask = min_masks_required - num_pos_to_mask
-        
-        # Sample random indices efficiently
-        if pos_positions.numel() > 0:
-            pos_to_mask = pos_positions[torch.randperm(pos_positions.numel(), device=device)[:num_pos_to_mask]]
-            flat_mask[pos_to_mask] = 0
-            
-        if neg_positions.numel() > 0 and num_neg_to_mask > 0:
-            neg_to_mask = neg_positions[torch.randperm(neg_positions.numel(), device=device)[:num_neg_to_mask]]
-            flat_mask[neg_to_mask] = 0
-        
-        # Reshape back and add to batch
-        collated_batch["fg_target_mask"] = flat_mask.view(batch_size, num_targets)
-        
-        return collated_batch

@@ -31,8 +31,8 @@ def suggest_parameters_phase1(trial):
     params["nist_lser_weight"] = trial.suggest_float("nist_lser_weight", 0.0, 0.5)
     params["chemmotion_weight"] = trial.suggest_float("chemmotion_weight", 0.0, 1.0)
     params["chemmotion_lser_weight"] = trial.suggest_float("chemmotion_lser_weight", 0.0, 0.3)
-    params["graphformer_weight"] = trial.suggest_float("graphformer_weight", 0.0, 0.5)
-    params["graphformer_lser_weight"] = trial.suggest_float("graphformer_lser_weight", 0.0, 0.5)
+    params["graphformer_weight"] = trial.suggest_float("graphformer_weight", 0.0, 0.2)
+    params["graphformer_lser_weight"] = trial.suggest_float("graphformer_lser_weight", 0.0, 0.1)
     
     # Model architecture parameters - explore full range
     params["patch_size"] = trial.suggest_categorical("patch_size", [8, 16, 32])
@@ -181,7 +181,7 @@ def suggest_param_phase2(trial, param, best_params, params):
         params["chemmotion_lser_weight"] = trial.suggest_float(
             "chemmotion_lser_weight", 
             max(0.0, best_weight - 0.1), 
-            min(0.4, best_weight + 0.1)
+            min(0.3, best_weight + 0.1)
         )
         
     elif param == "graphformer_weight":
@@ -189,7 +189,7 @@ def suggest_param_phase2(trial, param, best_params, params):
         params["graphformer_weight"] = trial.suggest_float(
             "graphformer_weight", 
             max(0.0, best_weight - 0.1), 
-            min(0.6, best_weight + 0.1)
+            min(0.3, best_weight + 0.1)
         )
         
     elif param == "graphformer_lser_weight":
@@ -197,7 +197,7 @@ def suggest_param_phase2(trial, param, best_params, params):
         params["graphformer_lser_weight"] = trial.suggest_float(
             "graphformer_lser_weight", 
             max(0.0, best_weight - 0.1), 
-            min(0.6, best_weight + 0.1)
+            min(0.1, best_weight + 0.1)
         )
         
     return params
@@ -321,7 +321,7 @@ def suggest_param_phase3(trial, param, best_params, params):
         params["chemmotion_lser_weight"] = trial.suggest_float(
             "chemmotion_lser_weight", 
             max(0.0, best_weight - 0.05), 
-            min(0.4, best_weight + 0.05)
+            min(0.3, best_weight + 0.05)
         )
         
     elif param == "graphformer_weight":
@@ -329,7 +329,7 @@ def suggest_param_phase3(trial, param, best_params, params):
         params["graphformer_weight"] = trial.suggest_float(
             "graphformer_weight", 
             max(0.0, best_weight - 0.05), 
-            min(0.6, best_weight + 0.05)
+            min(0.3, best_weight + 0.05)
         )
     
     elif param == "graphformer_lser_weight":
@@ -337,7 +337,7 @@ def suggest_param_phase3(trial, param, best_params, params):
         params["graphformer_lser_weight"] = trial.suggest_float(
             "graphformer_lser_weight", 
             max(0.0, best_weight - 0.05), 
-            min(0.6, best_weight + 0.05)
+            min(0.1, best_weight + 0.05)
         )
     
     return params

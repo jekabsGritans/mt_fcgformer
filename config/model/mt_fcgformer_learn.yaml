@@ -1,0 +1,16 @@
+# Metadata
+name: mt_fcgformer_learn
+
+# Class to construct
+init:
+  _target_: models.mt_fcgformer.MultiTokenFCGFormerLearn
+
+# hyperparameters
+spectrum_dim: 1024
+
+patch_size: 16
+embed_dim: 496
+num_layers: 2
+expansion_factor: 4
+n_heads: 8
+dropout_p: 0.18

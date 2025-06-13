@@ -283,7 +283,7 @@ class MLFlowDatasetAggregator:
 
 class GPUBatchSampler:
     """Sample batches directly on GPU for maximum throughput"""
-    def __init__(self, datasets, weights, batch_size, device, epochs_worth=10):
+    def __init__(self, datasets, weights, batch_size, device, epochs_worth=1):
         self.device = device
         self.batch_size = batch_size
         

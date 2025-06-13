@@ -1,0 +1,70 @@
+model:
+  name: mt_fcgformer
+  init:
+    _target_: models.mt_fcgformer.MultiTokenFCGFormer
+  spectrum_dim: 1024
+  patch_size: 16
+  embed_dim: 624
+  num_layers: 3
+  expansion_factor: 4
+  n_heads: 8
+  dropout_p: 0.14467606467859728
+metric_output_file: null
+skip_checkpoints: false
+dataset_id: 157d4b53c95f4af88ee86fbcc319bce2
+dataset_name: Shiyi-nist+chemotion+graphormer+rdk+LSER
+fg_names:
+- alkane
+- methyl
+- alkene
+- alkyne
+- alcohols
+- amines
+- nitriles
+- aromatics
+- alkyl halides
+- esters
+- ketones
+- aldehydes
+- carboxylic acids
+- ether
+- acyl halides
+- amides
+- nitro
+aux_bool_names: []
+aux_float_names: []
+run_name: mt_final_noaux-p2-t27
+nist_weight: 1.0
+nist_lser_weight: 0.2732564591472272
+chemmotion_weight: 0.19162667374060993
+chemmotion_lser_weight: 0.00039281403631206274
+graphformer_weight: 0.18893574050891127
+graphformer_lser_weight: 0.023634869015341498
+trainer:
+  lr: 0.001453482314697639
+  epochs: 1000
+  batch_size: 128
+  patience: 30
+  patience_threshold: 0.1
+  initial_aux_bool_weight: 0.5
+  initial_aux_float_weight: 0.001
+  aux_epochs: 20
+  weight_decay: 0.17345181515681737
+  warmup_steps: 3789
+  scheduler_t0: 3
+  scheduler_tmult: 2
+  checkpoint_interval_epochs: 2
+  log_interval_steps: 100
+  validator:
+    batch_size: 32
+    threshold: 0.5
+mode: train
+checkpoint: null
+device: cuda:0
+runs_path: ./runs
+experiment_name: mt_full_final
+use_noise: true
+use_mask: true
+use_shiftud: false
+use_shiftlr: true
+use_revert: false

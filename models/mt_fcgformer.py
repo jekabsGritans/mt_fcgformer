@@ -148,7 +148,6 @@ class PatchEmbed(nn.Module):
         x = self.norm(x)  # Apply layer normalization
         return x
 
-
 class MultiTokenFCGFormerModule(NeuralNetworkModule):
     """Neural network architecture for FCGFormer with multiple class tokens for multilabel classification"""
 
@@ -166,8 +165,13 @@ class MultiTokenFCGFormerModule(NeuralNetworkModule):
         # Multiple class tokens - one per target functional group
         self.cls_tokens = nn.Parameter(torch.randn(1, fg_target_dim, embed_dim) * 0.02)
         
+        # Additional auxiliary class token for auxiliary tasks
+        self.aux_token = nn.Parameter(torch.randn(1, 1, embed_dim) * 0.02) if (aux_bool_target_dim + aux_float_target_dim > 0) else None
+        
         # Create sinusoidal position embeddings - need to accommodate all tokens + patches
-        num_positions = fg_target_dim + self.patch_embed.n_patches
+        # Add 1 for the auxiliary token if needed
+        num_aux_tokens = 1 if (aux_bool_target_dim + aux_float_target_dim > 0) else 0
+        num_positions = fg_target_dim + num_aux_tokens + self.patch_embed.n_patches
         self.pos_embed = nn.Parameter(
             self._create_sinusoidal_embeddings(num_positions, embed_dim)
         )
@@ -191,12 +195,26 @@ class MultiTokenFCGFormerModule(NeuralNetworkModule):
         self.norm = nn.LayerNorm(embed_dim, eps=1e-6)
         
         # Each token directly projects to a single logit
-        self.head = nn.Linear(embed_dim, 1)
-        nn.init.xavier_uniform_(self.head.weight)
-        nn.init.zeros_(self.head.bias)
+        self.fg_head = nn.Linear(embed_dim, 1)
+        nn.init.xavier_uniform_(self.fg_head.weight)
+        nn.init.zeros_(self.fg_head.bias)
         
-        # Store fg_target_dim for forward pass
+        # Auxiliary heads (created only if needed)
+        self.aux_bool_head = nn.Linear(embed_dim, aux_bool_target_dim) if aux_bool_target_dim > 0 else None
+        if self.aux_bool_head is not None:
+            nn.init.xavier_uniform_(self.aux_bool_head.weight)
+            nn.init.zeros_(self.aux_bool_head.bias)
+            
+        self.aux_float_head = nn.Linear(embed_dim, aux_float_target_dim) if aux_float_target_dim > 0 else None
+        if self.aux_float_head is not None:
+            nn.init.xavier_uniform_(self.aux_float_head.weight)
+            nn.init.zeros_(self.aux_float_head.bias)
+        
+        # Store target dims for forward pass
         self.fg_target_dim = fg_target_dim
+        self.aux_bool_target_dim = aux_bool_target_dim
+        self.aux_float_target_dim = aux_float_target_dim
+        self.has_aux = (aux_bool_target_dim + aux_float_target_dim) > 0
         
         self._init_weights()
 
@@ -212,11 +230,18 @@ class MultiTokenFCGFormerModule(NeuralNetworkModule):
         # Expand class tokens to batch size
         cls_tokens = self.cls_tokens.expand(n_samples, -1, -1)  # (n_samples, fg_target_dim, embed_dim)
         
-        # Concatenate tokens with patch embeddings
-        embed_out = torch.cat((cls_tokens, embed_out), dim=1)  # (n_samples, fg_target_dim+n_patches, embed_dim)
+        # Concatenate tokens with patch embeddings (and auxiliary token if present)
+        if self.has_aux and self.aux_token is not None:
+            # Expand auxiliary token to batch size
+            aux_token = self.aux_token.expand(n_samples, -1, -1)  # (n_samples, 1, embed_dim)
+            # Concatenate in order: functional group tokens, auxiliary token, patch embeddings
+            embed_out = torch.cat((cls_tokens, aux_token, embed_out), dim=1)
+        else:
+            # Concatenate functional group tokens and patch embeddings
+            embed_out = torch.cat((cls_tokens, embed_out), dim=1)
         
         # Add positional encoding
-        embed_out = embed_out + self.pos_embed  # (n_samples, fg_target_dim+n_patches, embed_dim)
+        embed_out = embed_out + self.pos_embed  # (n_samples, total_tokens+n_patches, embed_dim)
         embed_out = self.pos_drop(embed_out)
 
         # Store attention maps for visualization
@@ -231,22 +256,40 @@ class MultiTokenFCGFormerModule(NeuralNetworkModule):
         # Apply final layer normalization
         embed_out = self.norm(embed_out)
 
-        # Extract only the class tokens
+        # Extract only the class tokens for functional groups
         cls_tokens_final = embed_out[:, :self.fg_target_dim, :]  # (n_samples, fg_target_dim, embed_dim)
+        
+        # Extract auxiliary token if present
+        aux_out = {}
+        if self.has_aux:
+            # Get the auxiliary token - it's right after the FG tokens
+            aux_token_final = embed_out[:, self.fg_target_dim:self.fg_target_dim + 1, :]  # (n_samples, 1, embed_dim)
+            aux_token_final = self.cls_dropout(aux_token_final)
+            
+            # Compute auxiliary boolean logits if needed
+            if self.aux_bool_target_dim > 0 and self.aux_bool_head is not None:
+                aux_bool_logits = self.aux_bool_head(aux_token_final).squeeze(1)  # (n_samples, aux_bool_target_dim)
+                aux_out["aux_bool_logits"] = aux_bool_logits
+                
+            # Compute auxiliary float predictions if needed
+            if self.aux_float_target_dim > 0 and self.aux_float_head is not None:
+                aux_float_preds = self.aux_float_head(aux_token_final).squeeze(1)  # (n_samples, aux_float_target_dim)
+                aux_out["aux_float_preds"] = aux_float_preds
         
         # Apply dropout before classification
         cls_tokens_final = self.cls_dropout(cls_tokens_final)
         
         # Project each token to a single logit and reshape
-        logits = self.head(cls_tokens_final).squeeze(-1)  # (n_samples, fg_target_dim)
+        logits = self.fg_head(cls_tokens_final).squeeze(-1)  # (n_samples, fg_target_dim)
 
-        out = {"fg_logits": logits}
+        # Combine outputs
+        out = {"fg_logits": logits, **aux_out}
         return out
 
     def _init_weights(self):
         # Initialize all linear layers EXCEPT head
         for m in self.modules():
-            if isinstance(m, nn.Linear) and m is not self.head:
+            if isinstance(m, nn.Linear) and m is not self.fg_head:
                 nn.init.xavier_uniform_(m.weight)
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
@@ -266,13 +309,14 @@ class MultiTokenFCGFormerModule(NeuralNetworkModule):
 
     def get_token_attention(self, layer_idx=-1):
         """
-        Returns token-specific attention maps for each functional group
+        Returns token-specific attention maps for each functional group token only.
+        Auxiliary token attention is ignored.
         
         Args:
             layer_idx: index of the layer to extract attention from, -1 means last layer
         
         Returns:
-            List of attention maps, one per token/functional group
+            List of attention maps, one per functional group token
         """
         if not self.attention_maps:
             return None
@@ -280,18 +324,20 @@ class MultiTokenFCGFormerModule(NeuralNetworkModule):
         # Get attention from specified layer
         attention = self.attention_maps[layer_idx]
         
-        # Extract attention maps for each token (averaged across heads)
-        # Shape: (batch_size, n_heads, seq_len, seq_len)
+        # Extract attention maps for each functional group token (averaged across heads)
         token_attentions = []
         
+        # Calculate the offset for patch indices - account for both FG tokens and aux token
+        patch_start_idx = self.fg_target_dim
+        if self.has_aux:
+            patch_start_idx += 1  # Add 1 if auxiliary token is present
+        
         for token_idx in range(self.fg_target_dim):
-            # Get attention from this token to all patches (exclude other tokens)
-            # token_idx+1 because token indexes start after all class tokens
-            token_attention = attention[:, :, token_idx, self.fg_target_dim:].mean(dim=1)  # Average over heads
+            # Get attention from this token to all patches (exclude ALL tokens)
+            token_attention = attention[:, :, token_idx, patch_start_idx:].mean(dim=1)  # Average over heads
             token_attentions.append(token_attention)
             
         return token_attentions
-
 
 class MultiTokenFCGFormer(BaseModel):
     """
@@ -300,6 +346,9 @@ class MultiTokenFCGFormer(BaseModel):
 
     def init_from_config(self, cfg: DictConfig):
         self.fg_names = cfg.fg_names
+        # Add auxiliary names
+        self.aux_bool_names = cfg.aux_bool_names
+        self.aux_float_names = cfg.aux_float_names
         self.spectrum_eval_transform = create_eval_transform()
 
         # Initialize the network
@@ -316,8 +365,7 @@ class MultiTokenFCGFormer(BaseModel):
             dropout_p=cfg.model.dropout_p
         )
 
-        assert len(cfg.aux_bool_names) == 0, "aux bool not implemented yet"
-        assert len(cfg.aux_float_names) == 0, "aux float not implemented yet"
+        # Removed assertions - auxiliary targets are now supported
 
         # Input is only spectrum
         input_schema = Schema([
@@ -362,6 +410,15 @@ class MultiTokenFCGFormer(BaseModel):
 
         self._input_example = input_example
 
+        # Update description to note auxiliary capability
+        has_aux = len(cfg.aux_bool_names) > 0 or len(cfg.aux_float_names) > 0
+        aux_note = """
+        Note: This model supports auxiliary prediction targets during training:
+        - Boolean targets: {0}
+        - Float targets: {1}
+        These auxiliary predictions are NOT included in inference output.
+        """.format(len(cfg.aux_bool_names), len(cfg.aux_float_names)) if has_aux else ""
+        
         self._description = f"""
         ## Input:
         - 1D array of shape (-1, {cfg.model.spectrum_dim}) representing the IR spectrum. For a single spectrum, use shape (1, {cfg.model.spectrum_dim}).
@@ -375,10 +432,15 @@ class MultiTokenFCGFormer(BaseModel):
         - positive_targets: list of strings, names of the targets predicted to be positive.
         - positive_probabilities: list of floats, probabilities for each target in positive_targets.
         - attention: visualization data for token-specific attention maps
+        {aux_note}
         """
 
+
     def predict(self, context, model_input: pd.DataFrame, params: dict | None = None) -> list[dict]:
-        """ Make predictions with the model. """
+        """
+        Make predictions with the model.
+        Note: Auxiliary predictions are NOT included in output - only functional groups.
+        """
         assert self.fg_names, "Functional group names must be set before prediction."
 
         threshold = params.get("threshold", 0.5) if params else 0.5
@@ -400,8 +462,9 @@ class MultiTokenFCGFormer(BaseModel):
             # Add batch dimension
             spectrum = spectrum.unsqueeze(0)
 
-            # Forward pass
-            logits = self.nn(spectrum)["fg_logits"]
+            # Forward pass - extract ONLY functional group logits
+            outputs = self.nn(spectrum)
+            logits = outputs["fg_logits"]  # Only care about functional group logits
             probabilities = torch.sigmoid(logits).squeeze(0).tolist()
 
             # Get token-specific attention maps
@@ -425,8 +488,7 @@ class MultiTokenFCGFormer(BaseModel):
                     out_targets.append(target)
                     
                     # Create attention regions for this target's token
-                    # Convert patch attention to wavenumber regions
-                    if token_attentions is not None:
+                    if token_attentions is not None and idx < len(token_attentions):
                         target_attention = token_attentions[idx][0].cpu().numpy()  # First batch item
                         patch_size = self.nn.patch_embed.patch_size
                         num_patches = len(target_attention)

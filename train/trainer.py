@@ -264,7 +264,13 @@ class Trainer:
                 self.update_aux_loss_weights(epoch)
                 self.nn.train()
 
-                for batch_idx, batch in enumerate(tqdm(self.train_loader, desc=f"Epoch [{epoch+1}/{self.cfg.trainer.epochs}]")):
+                train_batches = iter(self.train_loader)
+                for batch_idx in tqdm(range(len(self.train_loader)), desc=f"Epoch [{epoch+1}/{self.cfg.trainer.epochs}]"):
+                    try:
+                        batch = next(train_batches)
+                    except StopIteration:
+                        break  # End of epoch
+
                     if total_steps < self.cfg.trainer.warmup_steps:
                         # Linear warmup
                         warmup_factor = float(total_steps) / float(max(1, self.cfg.trainer.warmup_steps))

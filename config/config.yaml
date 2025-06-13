@@ -28,16 +28,16 @@ run_name: null
 nist_weight: 1.0
 nist_lser_weight: 0.2
 
-chemmotion_weight: 0.2
-chemmotion_lser_weight: 0.1
+chemmotion_weight: 0.1
+chemmotion_lser_weight: 0.05
 
-graphformer_weight: 0.1
+graphformer_weight: 0.0
 graphformer_lser_weight: 0.0
 
 trainer:
-  lr: 5e-5
+  lr: 4e-4
   epochs: 1000
-  batch_size: 256
+  batch_size: 128
   patience: 20 # stop training if validation loss does not improve for x subsequent epochs
   patience_threshold: 0.1
 
@@ -45,9 +45,9 @@ trainer:
   initial_aux_float_weight: 0.001
   aux_epochs: 20
 
-  weight_decay: 0.01
+  weight_decay: 0.15
 
-  warmup_steps: 1000
+  warmup_steps: 2000
 
   scheduler_t0: 3
   scheduler_tmult: 2

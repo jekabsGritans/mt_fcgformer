@@ -14,9 +14,9 @@ load_dotenv()
 OPTUNA_DB_URL="mysql+pymysql://user:hu4sie2Aiwee@192.168.6.5:3307/optuna"
 
 # Study names from your optimization script
-PHASE1_STUDY_NAME = "fcgformer-phase1-exploration"
-PHASE2_STUDY_NAME = "fcgformer-phase2-exploitation" 
-PHASE3_STUDY_NAME = "fcgformer-phase3-validation"
+PHASE1_STUDY_NAME = "stateful_mt_fcgformer-phase1-exploration"
+PHASE2_STUDY_NAME = "stateful_mt_fcgformer-phase2-exploitation" 
+PHASE3_STUDY_NAME = "stateful_mt_fcgformer-phase3-validation"
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -198,6 +198,27 @@ def get_param_importance(phase):
         })
     except Exception as e:
         return jsonify({"error": str(e)})
+
+@app.route('/best_runs')
+def best_runs():
+    best_runs = {}
+    for phase, study_name in [
+        (1, PHASE1_STUDY_NAME), 
+        (2, PHASE2_STUDY_NAME), 
+        (3, PHASE3_STUDY_NAME)
+    ]:
+        try:
+            study = optuna.load_study(study_name=study_name, storage=OPTUNA_DB_URL)
+            run_name = study.user_attrs.get('best_mlflow_run_name')
+            val_f1 = study.user_attrs.get('best_val_f1')
+            best_runs[f"phase{phase}"] = {
+                "run_name": run_name,
+                "val_f1": val_f1
+            }
+        except:
+            best_runs[f"phase{phase}"] = {"error": "Study not found"}
+    
+    return render_template('best_runs.html', best_runs=best_runs)
 
 @app.route('/api/parallel_coords/<phase>')
 def get_parallel_coords_data(phase):

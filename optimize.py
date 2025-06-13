@@ -14,12 +14,13 @@ import mlflow
 import optuna
 from dotenv import load_dotenv
 
+from optimize_suggest_params import suggest_parameters
 from utils.mlflow_utils import configure_mlflow_auth
 
 # ===== OVERRIDE FLAGS FOR DEBUGGING =====
 # Set to True to force specific parts of the model off
 DISABLE_AUX_LOSS = False       # Set all aux loss weights to 0
-FORCE_MASK_RATE = 0         # Set to a value between 0.0-1.0 to force a specific mask rate
+FORCE_MASK_RATE = None         # Set to a value between 0.0-1.0 to force a specific mask rate
                                # or None to use Optuna's suggestion
 
 # Dataset override flags
@@ -28,6 +29,7 @@ DISABLE_CHEMMOTION = False     # Force chemmotion_weight to 0
 DISABLE_CHEMMOTION_LSER = False # Force chemmotion_lser_weight to 0
 DISABLE_GRAPHFORMER = False    # Force graphformer_weight to 0
 DISABLE_GRAPHFORMER_LSER = False # Force graphformer_lser_weight to 0
+
 
 
 # Setup logging
@@ -47,17 +49,23 @@ WORKER_ID = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
 # Fixed parameters
 MODEL = "mt_fcgformer"
 DATASET_ID = "157d4b53c95f4af88ee86fbcc319bce2"
-EXPERIMENT_NAME = "bigdata_mt_fcg-hyperparam-search"
+EXPERIMENT_NAME = "fulldata_mt_fcg-hyperparam-search"
 MIN_EPOCHS = 2
 
+# MLflow configuration
+MLFLOW_EXPERIMENT_NAME = f"fcgformer-optuna-optimization"
+MONITOR_EXPERIMENT_NAME = f"fcgformer-monitoring"
+
+RUN_ID_MAP = {}  # Map trial IDs to MLflow run IDs
 # Set up Optuna database URL
 load_dotenv()
 OPTUNA_DB_URL = os.getenv("OPTUNA_DB_URL")
 
 # Define search strategy phases
-PHASE1_STUDY_NAME = "stateful_mt_fcgformer-phase1-exploration"
-PHASE2_STUDY_NAME = "stateful_mt_fcgformer-phase2-exploitation"
-PHASE3_STUDY_NAME = "stateful_mt_fcgformer-phase3-validation"
+STUDY = "fulldata_mt_fcgformer"
+PHASE1_STUDY_NAME = f"{STUDY}-phase1-exploration"
+PHASE2_STUDY_NAME = f"{STUDY}-phase2-exploitation"
+PHASE3_STUDY_NAME = f"{STUDY}-phase3-validation"
 
 # if DONT_OPTIMIZE env variable is set to true, exit script
 if os.getenv("DONT_OPTIMIZE", "false").lower() == "true":
@@ -67,30 +75,42 @@ if os.getenv("DONT_OPTIMIZE", "false").lower() == "true":
 # Global variable to track the current process
 current_process = None
 
-# Add to optimize.py
 def update_job_status(status, error=None):
-    """Report job status to MLflow"""
-    
+    """Report job status to MLflow without creating redundant runs"""
     try:
-        # Use dedicated experiment for job monitoring
-        mlflow.set_experiment("vastai_job_monitoring")
+        mlflow.set_experiment(MONITOR_EXPERIMENT_NAME)
         
-        with mlflow.start_run(run_name=f"optuna_{WORKER_ID}"):
-            mlflow.set_tag("hostname", socket.gethostname())
-            mlflow.set_tag("worker_id", WORKER_ID)
-            mlflow.set_tag("status", status)
-            mlflow.set_tag("last_update", time.strftime("%Y-%m-%d %H:%M:%S"))
-            mlflow.set_tag("study_name", f"Current phase: {get_current_phase()}")
-            
-            if error:
-                mlflow.set_tag("error", str(error))
-            
-            # Log the IP address for SSH access
-            try:
-                ip = subprocess.check_output("curl -s ifconfig.me", shell=True).decode().strip()
-                mlflow.set_tag("ip_address", ip)
-            except:
-                pass
+        # Use consistent run ID based on worker ID
+        run_key = f"worker_{WORKER_ID}"
+        
+        # Find existing run or create a new one
+        if run_key in RUN_ID_MAP:
+            with mlflow.start_run(run_id=RUN_ID_MAP[run_key]):
+                mlflow.set_tag("status", status)
+                mlflow.set_tag("last_update", time.strftime("%Y-%m-%d %H:%M:%S"))
+                mlflow.set_tag("phase", get_current_phase())
+                if error:
+                    mlflow.set_tag("error", str(error))
+        else:
+            # Create new run
+            with mlflow.start_run(run_name=run_key) as run:
+                mlflow.set_tag("hostname", socket.gethostname())
+                mlflow.set_tag("worker_id", WORKER_ID)
+                mlflow.set_tag("status", status)
+                mlflow.set_tag("phase", get_current_phase())
+                mlflow.set_tag("start_time", time.strftime("%Y-%m-%d %H:%M:%S"))
+                if error:
+                    mlflow.set_tag("error", str(error))
+                
+                # Log IP address for remote access
+                try:
+                    ip = subprocess.check_output("curl -s ifconfig.me", shell=True).decode().strip()
+                    mlflow.set_tag("ip_address", ip)
+                except:
+                    pass
+                
+                # Save run ID for future updates
+                RUN_ID_MAP[run_key] = run.info.run_id
     except Exception as e:
         logger.error(f"Failed to update job status: {e}")
 
@@ -111,566 +131,6 @@ def gracefully_terminate_process(process, timeout=30):
             return False
     return True
 
-def suggest_parameters(trial, phase):
-    """Suggest parameters based on optimization phase"""
-    params = {}
-    
-    # === PHASE 1: Wide exploration of all parameters ===
-    if phase == 1:
-        # Trainer hyperparameters - wide ranges
-        params["lr"] = trial.suggest_float("lr", 5e-6, 1e-3, log=True)  # Lower range
-        params["weight_decay"] = trial.suggest_float("weight_decay", 1e-4, 3e-1, log=True)  # Higher min
-        params["warmup_steps"] = trial.suggest_int("warmup_steps", 500, 2000, log=True)  # Longer warmup
-        params["batch_size"] = trial.suggest_categorical('batch_size', [64, 128, 256, 512])
-        params["scheduler_t0"] = trial.suggest_int("scheduler_t0", 3, 30)
-        params["scheduler_tmult"] = trial.suggest_categorical("scheduler_tmult", [1, 2])
-
-        # Auxiliary loss parameters
-        params["initial_aux_bool_weight"] = trial.suggest_float("initial_aux_bool_weight", 0.1, 1.0)
-        params["initial_aux_float_weight"] = trial.suggest_float("initial_aux_float_weight", 0.0001, 0.01, log=True)
-        params["aux_epochs"] = trial.suggest_int("aux_epochs", 10, 40)
-        
-        # Dataset weights (nist_weight always fixed at 1.0 as baseline)
-        params["nist_lser_weight"] = trial.suggest_float("nist_lser_weight", 0.0, 0.5)
-        params["chemmotion_weight"] = trial.suggest_float("chemmotion_weight", 0.0, 1.0)
-        params["chemmotion_lser_weight"] = trial.suggest_float("chemmotion_lser_weight", 0.0, 0.3)
-        params["graphformer_weight"] = trial.suggest_float("graphformer_weight", 0.0, 0.5)
-        params["graphformer_lser_weight"] = trial.suggest_float("graphformer_lser_weight", 0.0, 0.5)
-        
-        # Model architecture parameters - explore full range
-        params["patch_size"] = trial.suggest_categorical("patch_size", [8, 16, 32])
-        params["embed_dim"] = trial.suggest_int("embed_dim", 128, 896, step=8)
-        params["num_layers"] = trial.suggest_int("num_layers", 1, 4)
-        params["expansion_factor"] = trial.suggest_int("expansion_factor", 1, 4)
-        params["n_heads"] = trial.suggest_categorical("n_heads", [2, 4, 8])
-        params["dropout_p"] = trial.suggest_float("dropout_p", 0.0, 0.5)
-        
-        # Augmentation strategy - test different combinations
-        params["use_noise"] = trial.suggest_categorical("use_noise", [True, False])
-        params["use_mask"] = trial.suggest_categorical("use_mask", [True, False])
-        params["use_shiftud"] = trial.suggest_categorical("use_shiftud", [True, False])
-        params["use_shiftlr"] = trial.suggest_categorical("use_shiftlr", [False, True])
-        params["use_revert"] = trial.suggest_categorical("use_revert", [False, True])
-        
-    # === PHASE 2: Exploit promising regions with narrowed search ===
-    elif phase == 2:
-        # Get best parameters from phase 1
-        best_params = trial.study.user_attrs.get('best_phase1_params', {})
-        important_params = trial.study.user_attrs.get('important_params', {})
-        
-        # Only tune parameters above importance threshold (or top 8)
-        for param, importance in important_params.items():
-            if param == "lr":
-                best_lr = best_params.get("lr", 1e-4)
-                params["lr"] = trial.suggest_float("lr", best_lr * 0.3, best_lr * 3.0, log=True)
-            
-            elif param == "batch_size":
-                # Keep categorical but maybe prioritize values near best
-                params["batch_size"] = trial.suggest_categorical('batch_size', [64, 128, 256, 512])
-            
-            elif param == "weight_decay":
-                best_wd = best_params.get("weight_decay", 0.01)
-                params["weight_decay"] = trial.suggest_float("weight_decay", best_wd * 0.3, best_wd * 3.0, log=True)
-                
-            elif param == "warmup_steps":
-                best_ws = best_params.get("warmup_steps", 1000)
-                params["warmup_steps"] = trial.suggest_int("warmup_steps", int(best_ws * 0.5), int(best_ws * 2.0), log=True)
-                
-            elif param == "scheduler_t0":
-                best_t0 = best_params.get("scheduler_t0", 40)
-                params["scheduler_t0"] = trial.suggest_int("scheduler_t0", max(5, int(best_t0 * 0.5)), int(best_t0 * 1.5))
-                
-            elif param == "scheduler_tmult":
-                best_tmult = best_params.get("scheduler_tmult", 2)
-                params["scheduler_tmult"] = best_tmult
-                
-            elif param == "patch_size":
-                params["patch_size"] = trial.suggest_categorical("patch_size", [8, 16, 32])
-                
-            elif param == "embed_dim":
-                best_embed = best_params.get("embed_dim", 512)
-                min_rounded = int(best_embed * 0.7 // 8) * 8
-                max_rounded = int(best_embed * 1.3 // 8) * 8
-                params["embed_dim"] = trial.suggest_int("embed_dim", min_rounded, max_rounded, step=8)
-                
-            elif param == "num_layers":
-                best_layers = best_params.get("num_layers", 2)
-                params["num_layers"] = trial.suggest_int("num_layers", max(1, best_layers - 1), best_layers + 1)
-                
-            elif param == "expansion_factor":
-                best_exp = best_params.get("expansion_factor", 2)
-                params["expansion_factor"] = trial.suggest_int("expansion_factor", max(1, best_exp - 1), best_exp + 1)
-                
-            elif param == "n_heads":
-                params["n_heads"] = best_params.get("n_heads", 4)
-                
-            elif param == "dropout_p":
-                best_drop = best_params.get("dropout_p", 0.1)
-                params["dropout_p"] = trial.suggest_float("dropout_p", max(0.0, best_drop - 0.1), min(0.5, best_drop + 0.1))
-
-            # Auxiliary loss parameters
-            elif param == "initial_aux_bool_weight":
-                best_weight = best_params.get("initial_aux_bool_weight", 0.5)
-                params["initial_aux_bool_weight"] = trial.suggest_float(
-                    "initial_aux_bool_weight", 
-                    max(0.05, best_weight * 0.5), 
-                    min(1.0, best_weight * 1.5)
-                )
-                
-            elif param == "initial_aux_float_weight":
-                best_weight = best_params.get("initial_aux_float_weight", 0.001)
-                params["initial_aux_float_weight"] = trial.suggest_float(
-                    "initial_aux_float_weight", 
-                    best_weight * 0.5, 
-                    best_weight * 2.0, 
-                    log=True
-                )
-                
-            elif param == "aux_epochs":
-                best_epochs = best_params.get("aux_epochs", 100)
-                params["aux_epochs"] = trial.suggest_int(
-                    "aux_epochs", 
-                    max(20, int(best_epochs * 0.7)), 
-                    int(best_epochs * 1.3)
-                )
-                
-            # Dataset weights
-            elif param == "nist_lser_weight":
-                best_weight = best_params.get("nist_lser_weight", 0.2)
-                params["nist_lser_weight"] = trial.suggest_float(
-                    "nist_lser_weight", 
-                    max(0.0, best_weight - 0.1), 
-                    min(0.6, best_weight + 0.1)
-                )
-                
-            elif param == "chemmotion_weight":
-                best_weight = best_params.get("chemmotion_weight", 0.5)
-                params["chemmotion_weight"] = trial.suggest_float(
-                    "chemmotion_weight", 
-                    max(0.0, best_weight - 0.2), 
-                    min(1.0, best_weight + 0.2)
-                )
-                
-            elif param == "chemmotion_lser_weight":
-                best_weight = best_params.get("chemmotion_lser_weight", 0.1)
-                params["chemmotion_lser_weight"] = trial.suggest_float(
-                    "chemmotion_lser_weight", 
-                    max(0.0, best_weight - 0.1), 
-                    min(0.4, best_weight + 0.1)
-                )
-                
-            elif param == "graphformer_weight":
-                best_weight = best_params.get("graphformer_weight", 0.2)
-                params["graphformer_weight"] = trial.suggest_float(
-                    "graphformer_weight", 
-                    max(0.0, best_weight - 0.1), 
-                    min(0.6, best_weight + 0.1)
-                )
-                
-            elif param == "graphformer_lser_weight":
-                best_weight = best_params.get("graphformer_lser_weight", 0.2)
-                params["graphformer_lser_weight"] = trial.suggest_float(
-                    "graphformer_lser_weight", 
-                    max(0.0, best_weight - 0.1), 
-                    min(0.6, best_weight + 0.1)
-                )
-        
-        # For parameters not explicitly chosen, fill with best values from phase 1
-        aux_loss_params = ["initial_aux_bool_weight", "initial_aux_float_weight", "aux_epochs"]
-        dataset_weight_params = ["nist_lser_weight", "chemmotion_weight", "chemmotion_lser_weight", 
-                                 "graphformer_weight", "graphformer_lser_weight"]
-        
-        for param in aux_loss_params + dataset_weight_params:
-            if param not in params and param in best_params:
-                params[param] = best_params[param]
-
-                
-        # For augmentation parameters, keep the best configuration from phase 1
-        for aug_param in ["use_noise", "use_mask", "use_shiftud", "use_shiftlr", "use_revert"]:
-            params[aug_param] = best_params.get(aug_param, True)
-        
-        # Fill in parameters not in important_params with best values from phase 1
-        for param_name, param_value in best_params.items():
-            if param_name not in params:
-                params[param_name] = param_value
-    
-    # === PHASE 3: Validation with focused parameter tuning ===
-    elif phase == 3:
-        # Get best parameters from phase 2
-        best_params = trial.study.user_attrs.get('best_phase2_params', {})
-        top_params = trial.study.user_attrs.get('top_params', {})
-        
-        # Only tune the top 3-5 most important parameters
-        for param in top_params:
-            if param == "lr":
-                best_lr = best_params.get("lr", 1e-4)
-                params["lr"] = trial.suggest_float("lr", best_lr * 0.8, best_lr * 1.2, log=True)
-            
-            elif param == "batch_size":
-                # In validation phase, we might want to fix batch size or try very few options
-                params["batch_size"] = trial.suggest_categorical('batch_size', [best_params.get("batch_size", 128)])
-            
-            elif param == "weight_decay":
-                best_wd = best_params.get("weight_decay", 0.01)
-                params["weight_decay"] = trial.suggest_float("weight_decay", best_wd * 0.7, best_wd * 1.3, log=True)
-                
-            elif param == "warmup_steps":
-                best_ws = best_params.get("warmup_steps", 1000)
-                params["warmup_steps"] = trial.suggest_int("warmup_steps", int(best_ws * 0.8), int(best_ws * 1.2), log=True)
-                
-            elif param == "scheduler_t0":
-                best_t0 = best_params.get("scheduler_t0", 40)
-                params["scheduler_t0"] = trial.suggest_int("scheduler_t0", max(5, int(best_t0 * 0.8)), int(best_t0 * 1.2))
-                
-            elif param == "scheduler_tmult":
-                best_tmult = best_params.get("scheduler_tmult", 2)
-                params["scheduler_tmult"] = best_tmult
-                
-            elif param == "patch_size":
-                # Usually fixed in phase 3
-                params["patch_size"] = best_params.get("patch_size", 16)
-                
-            elif param == "embed_dim":
-                best_embed = best_params.get("embed_dim", 512)
-                min_rounded = int(best_embed * 0.9 // 8) * 8
-                max_rounded = int(best_embed * 1.1 // 8) * 8
-                params["embed_dim"] = trial.suggest_int("embed_dim", min_rounded, max_rounded, step=8)
-                
-            elif param == "num_layers":
-                # Usually fixed in phase 3
-                params["num_layers"] = best_params.get("num_layers", 2)
-                
-            elif param == "expansion_factor":
-                # Usually fixed in phase 3
-                params["expansion_factor"] = best_params.get("expansion_factor", 2)
-                
-            elif param == "n_heads":
-                # Usually fixed in phase 3
-                params["n_heads"] = best_params.get("n_heads", 4)
-                
-            elif param == "dropout_p":
-                best_drop = best_params.get("dropout_p", 0.1)
-                params["dropout_p"] = trial.suggest_float("dropout_p", max(0.0, best_drop - 0.05), min(0.5, best_drop + 0.05))
-
-            elif param == "initial_aux_bool_weight":
-                best_weight = best_params.get("initial_aux_bool_weight", 0.5)
-                params["initial_aux_bool_weight"] = trial.suggest_float(
-                    "initial_aux_bool_weight", 
-                    max(0.05, best_weight * 0.8), 
-                    min(1.0, best_weight * 1.2)
-                )
-            
-            elif param == "initial_aux_float_weight":
-                best_weight = best_params.get("initial_aux_float_weight", 0.001)
-                params["initial_aux_float_weight"] = trial.suggest_float(
-                    "initial_aux_float_weight", 
-                    best_weight * 0.7, 
-                    best_weight * 1.3, 
-                    log=True
-                )
-    
-            elif param == "aux_epochs":
-                best_epochs = best_params.get("aux_epochs", 100)
-                params["aux_epochs"] = trial.suggest_int(
-                    "aux_epochs", 
-                    max(20, int(best_epochs * 0.9)), 
-                    int(best_epochs * 1.1)
-                )
-                
-            # Dataset weights
-            elif param == "nist_lser_weight":
-                best_weight = best_params.get("nist_lser_weight", 0.2)
-                params["nist_lser_weight"] = trial.suggest_float(
-                    "nist_lser_weight", 
-                    max(0.0, best_weight - 0.05), 
-                    min(0.6, best_weight + 0.05)
-                )
-                
-            elif param == "chemmotion_weight":
-                best_weight = best_params.get("chemmotion_weight", 0.5)
-                params["chemmotion_weight"] = trial.suggest_float(
-                    "chemmotion_weight", 
-                    max(0.0, best_weight - 0.1), 
-                    min(1.0, best_weight + 0.1)
-                )
-                
-            elif param == "chemmotion_lser_weight":
-                best_weight = best_params.get("chemmotion_lser_weight", 0.1)
-                params["chemmotion_lser_weight"] = trial.suggest_float(
-                    "chemmotion_lser_weight", 
-                    max(0.0, best_weight - 0.05), 
-                    min(0.4, best_weight + 0.05)
-                )
-                
-            elif param == "graphformer_weight":
-                best_weight = best_params.get("graphformer_weight", 0.2)
-                params["graphformer_weight"] = trial.suggest_float(
-                    "graphformer_weight", 
-                    max(0.0, best_weight - 0.05), 
-                    min(0.6, best_weight + 0.05)
-                )
-            
-            elif param == "graphformer_lser_weight":
-                best_weight = best_params.get("graphformer_lser_weight", 0.2)
-                params["graphformer_lser_weight"] = trial.suggest_float(
-                    "graphformer_lser_weight", 
-                    max(0.0, best_weight - 0.05), 
-                    min(0.6, best_weight + 0.05)
-                )
-
-        
-        for aug_param in ["use_noise", "use_mask", "use_shiftud", "use_shiftlr", "use_revert"]:
-            params[aug_param] = best_params.get(aug_param, False)
-        
-        # Set all other parameters to their best values from phase 2
-        for param_name, param_value in best_params.items():
-            if param_name not in params:
-                params[param_name] = param_value
-    
-    return params
-
-def objective(trial):
-    """Optuna objective function for hyperparameter optimization"""
-    global current_process
-
-    # Clean up old trials if too many exist
-    trial_dirs = glob.glob("./trials/phase*_trial_*")
-    if len(trial_dirs) > 20:  # Keep only most recent 50 trials
-        for old_dir in sorted(trial_dirs, key=os.path.getctime)[:len(trial_dirs)-50]:
-            try:
-                shutil.rmtree(old_dir)
-            except:
-                pass  # Ignore errors
-
-    # Get current phase from study user attrs
-    phase = trial.study.user_attrs.get('phase', 1)
-    
-    # Get parameters for current phase
-    params = suggest_parameters(trial, phase)
-
-    # ===== APPLY DEBUGGING OVERRIDES =====
-    if DISABLE_AUX_LOSS:
-        params["initial_aux_bool_weight"] = 0.0
-        params["initial_aux_float_weight"] = 0.0
-        logger.info("OVERRIDE: Auxiliary loss disabled")
-        
-    if DISABLE_NIST_LSER:
-        params["nist_lser_weight"] = 0.0
-        logger.info("OVERRIDE: NIST LSER dataset disabled")
-        
-    if DISABLE_CHEMMOTION:
-        params["chemmotion_weight"] = 0.0
-        logger.info("OVERRIDE: ChemMotion dataset disabled")
-        
-    if DISABLE_CHEMMOTION_LSER:
-        params["chemmotion_lser_weight"] = 0.0
-        logger.info("OVERRIDE: ChemMotion LSER dataset disabled")
-        
-    if DISABLE_GRAPHFORMER:
-        params["graphformer_weight"] = 0.0
-        logger.info("OVERRIDE: Graphformer dataset disabled")
-        
-    if DISABLE_GRAPHFORMER_LSER:
-        params["graphformer_lser_weight"] = 0.0
-        logger.info("OVERRIDE: Graphformer LSER dataset disabled")
-
-    
-    # Extract individual parameters
-    lr = params["lr"]
-    batch_size = params["batch_size"]
-    weight_decay = params["weight_decay"]
-    warmup_steps = params["warmup_steps"]
-    scheduler_t0 = params["scheduler_t0"]
-    scheduler_tmult = params["scheduler_tmult"]
-    
-    patch_size = params["patch_size"]
-    embed_dim = params["embed_dim"]
-    num_layers = params["num_layers"]
-    expansion_factor = params["expansion_factor"]
-    n_heads = params["n_heads"]
-    dropout_p = params["dropout_p"]
-    
-    use_noise = params["use_noise"]
-    use_mask = params["use_mask"]
-    use_shiftud = params["use_shiftud"]
-    use_shiftlr = params["use_shiftlr"]
-    use_revert = params["use_revert"]
-
-    # Extract auxiliary loss parameters if they exist
-    initial_aux_bool_weight = params["initial_aux_bool_weight"]
-    initial_aux_float_weight = params["initial_aux_float_weight"]
-    aux_epochs = params["aux_epochs"]
-    
-    # Extract dataset weights
-    nist_lser_weight = params["nist_lser_weight"]
-    chemmotion_weight = params["chemmotion_weight"]
-    chemmotion_lser_weight = params["chemmotion_lser_weight"]
-    graphformer_weight = params["graphformer_weight"]
-    graphformer_lser_weight = params["graphformer_lser_weight"]
-
-    
-    # Create a unique directory for this trial's files
-    trial_metrics_dir = os.path.join("./trials", f"phase{phase}_trial_{trial.number}")
-    os.makedirs(trial_metrics_dir, exist_ok=True)
-    metrics_file = os.path.join(trial_metrics_dir, "metrics.json")
-    training_log = os.path.join(trial_metrics_dir, "training.log")
-    
-    # Build command with base parameters
-    cmd = [
-        sys.executable, "main.py",
-        "mode=train",
-        "device=cuda:0",
-        f"experiment_name={EXPERIMENT_NAME}_phase{phase}",
-        f"dataset_id={DATASET_ID}",
-        f"model={MODEL}",
-        
-        # Trainer params
-        f"trainer.lr={lr}",
-        f"trainer.batch_size={batch_size}",
-        f"trainer.weight_decay={weight_decay}",
-        f"trainer.warmup_steps={warmup_steps}",
-        f"trainer.scheduler_t0={scheduler_t0}",
-        f"trainer.scheduler_tmult={scheduler_tmult}",
-        
-        # Auxiliary loss parameters
-        f"trainer.initial_aux_bool_weight={initial_aux_bool_weight}",
-        f"trainer.initial_aux_float_weight={initial_aux_float_weight}",
-        f"trainer.aux_epochs={aux_epochs}",
-        
-        # Model params
-        f"model.patch_size={patch_size}",
-        f"model.embed_dim={embed_dim}",
-        f"model.num_layers={num_layers}",
-        f"model.expansion_factor={expansion_factor}",
-        f"model.n_heads={n_heads}",
-        f"model.dropout_p={dropout_p}",
-        
-        # Transform control flags
-        f"use_noise={use_noise}",
-        f"use_mask={use_mask}",
-        f"use_shiftud={use_shiftud}",
-        f"use_shiftlr={use_shiftlr}",
-        f"use_revert={use_revert}",
-        
-        # Fixed parameters - adjust based on phase
-        f"trainer.epochs={30 if phase == 3 else 20 if phase == 2 else 10}",
-        f"trainer.patience={20 if phase == 3 else 30 if phase == 2 else 40}",
-        f"metric_output_file={metrics_file}",
-        "skip_checkpoints=True",
-        
-        # Dataset weights
-        "nist_weight=1.0",  # Always fixed at 1.0
-        f"nist_lser_weight={nist_lser_weight}",
-        f"chemmotion_weight={chemmotion_weight}",
-        f"chemmotion_lser_weight={chemmotion_lser_weight}",
-        f"graphformer_weight={graphformer_weight}",
-        f"graphformer_lser_weight={graphformer_lser_weight}",
-
-        *([f"min_mask_rate={FORCE_MASK_RATE}"] if FORCE_MASK_RATE is not None else []),
-        *([f"max_mask_rate={FORCE_MASK_RATE}"] if FORCE_MASK_RATE is not None else []),
-    ]
-    
-    
-    # Log detailed trial information
-    transform_info = f"Transforms: noise={use_noise}, mask={use_mask}, shiftUD={use_shiftud}, shiftLR={use_shiftlr}, revert={use_revert}"
-    model_info = f"Model: layers={num_layers}, heads={n_heads}, embed_dim={embed_dim}, patch={patch_size}"
-    phase_info = f"Phase {phase}"
-    logger.info(f"Starting trial {trial.number} ({phase_info}) with {model_info}, {transform_info}")
-    
-    try:
-        # Start the training process with output redirected to log file
-        with open(training_log, 'w') as log_file:
-            current_process = subprocess.Popen(
-                cmd, 
-                stdout=log_file, 
-                stderr=subprocess.STDOUT
-            )
-        
-        # Monitoring code with phase-specific adjustments
-        best_val_f1 = 0
-        last_epoch = 0
-        no_improvement_count = 0
-        
-        # Adjust patience and early stopping based on phase
-        early_stop_epochs = 10 if phase == 1 else 20 if phase == 2 else 30
-        patience_threshold = 5 if phase == 1 else 8 if phase == 2 else 12
-        min_f1_threshold = 0.4 if phase == 1 else 0.5 if phase == 2 else 0.6
-
-        
-        while current_process.poll() is None:
-            time.sleep(10)  # Check metrics every 5 seconds
-            
-            # Check if metrics file exists and read it
-            if os.path.exists(metrics_file):
-                try:
-                    with open(metrics_file, 'r') as f:
-                        metrics_data = json.load(f)
-                    
-                    current_epoch = metrics_data.get("epoch", 0)
-                    val_f1 = metrics_data.get("val/fg/weighted_f1", 0)
-                    val_loss = metrics_data.get("val/loss/total", float('inf'))
-                    
-                    # Only log if epoch changed
-                    if current_epoch > last_epoch:
-                        logger.info(f"Trial {trial.number} P{phase} - Epoch {current_epoch}: val_f1={val_f1:.4f}, val_loss={val_loss:.4f}")
-                        last_epoch = current_epoch
-                        
-                        # Report to Optuna for pruning
-                        if current_epoch >= MIN_EPOCHS:
-                            trial.report(val_f1, current_epoch)
-                            
-                            # Track best F1 score
-                            if val_f1 > best_val_f1:
-                                best_val_f1 = val_f1
-                                no_improvement_count = 0
-                            else:
-                                no_improvement_count += 1
-                            
-                            # Check if Optuna decides to prune
-                            if trial.should_prune():
-                                logger.info(f"Trial {trial.number} P{phase} pruned by Optuna at epoch {current_epoch}")
-                                gracefully_terminate_process(current_process)
-                                return val_f1
-                            
-                            # Custom early stopping for bad runs - stricter in later phases
-                            if current_epoch >= early_stop_epochs and val_f1 < min_f1_threshold:
-                                logger.info(f"Trial {trial.number} P{phase} stopped early due to poor performance")
-                                gracefully_terminate_process(current_process)
-                                return val_f1
-                            
-                            # Custom early stopping if no improvement for several epochs
-                            if no_improvement_count >= patience_threshold and current_epoch >= early_stop_epochs:
-                                logger.info(f"Trial {trial.number} P{phase} stopped early due to no improvement")
-                                gracefully_terminate_process(current_process)
-                                return best_val_f1
-                                
-                except (json.JSONDecodeError, IOError) as e:
-                    # File might be being written to
-                    pass
-                    
-        # Process completed naturally
-        if os.path.exists(metrics_file):
-            try:
-                with open(metrics_file, 'r') as f:
-                    final_metrics = json.load(f)
-                final_val_f1 = final_metrics.get("val/fg/weighted_f1", 0)
-                logger.info(f"Trial {trial.number} P{phase} completed with final val_f1={final_val_f1:.4f}")
-                return final_val_f1
-            except (json.JSONDecodeError, IOError):
-                logger.warning(f"Trial {trial.number} P{phase} - Could not read final metrics file")
-                return best_val_f1  # Return the best observed value
-        
-        logger.warning(f"Trial {trial.number} P{phase} - No metrics file available")
-        return 0.0
-        
-    except Exception as e:
-        logger.error(f"Error in trial {trial.number} P{phase}: {e}")
-        if current_process and current_process.poll() is None:
-            gracefully_terminate_process(current_process)
-        return 0.0
-        
-    finally:
-        current_process = None
 
 def handle_sigterm(signum, frame):
     """Handle termination signal"""
@@ -721,6 +181,341 @@ def get_parameter_importance(study):
     except Exception as e:
         logger.error(f"Error calculating parameter importance: {e}")
         return {}
+
+def monitor_training_process(current_process, training_log, metrics_file, trial, phase):
+    """Monitor training process and check metrics periodically"""
+    best_val_f1 = 0
+    last_epoch = 0
+    no_improvement_count = 0
+    
+    # Adjust patience and early stopping based on phase
+    early_stop_epochs = 10 if phase == 1 else 20 if phase == 2 else 30
+    patience_threshold = 5 if phase == 1 else 8 if phase == 2 else 12
+    min_f1_threshold = 0.4 if phase == 1 else 0.5 if phase == 2 else 0.6
+    
+    while current_process.poll() is None:
+        time.sleep(10)  # Check metrics every 10 seconds
+        
+        # Check if metrics file exists and read it
+        if os.path.exists(metrics_file):
+            try:
+                with open(metrics_file, 'r') as f:
+                    metrics_data = json.load(f)
+                
+                current_epoch = metrics_data.get("epoch", 0)
+                val_f1 = metrics_data.get("val/fg/weighted_f1", 0)
+                val_loss = metrics_data.get("val/loss/total", float('inf'))
+                
+                # Only log if epoch changed
+                if current_epoch > last_epoch:
+                    logger.info(f"Trial {trial.number} P{phase} - Epoch {current_epoch}: val_f1={val_f1:.4f}, val_loss={val_loss:.4f}")
+                    last_epoch = current_epoch
+                    
+                    # Report to Optuna for pruning
+                    if current_epoch >= MIN_EPOCHS:
+                        trial.report(val_f1, current_epoch)
+                        
+                        # Track best F1 score
+                        if val_f1 > best_val_f1:
+                            best_val_f1 = val_f1
+                            no_improvement_count = 0
+                        else:
+                            no_improvement_count += 1
+                        
+                        # Check if Optuna decides to prune
+                        if trial.should_prune():
+                            logger.info(f"Trial {trial.number} P{phase} pruned by Optuna at epoch {current_epoch}")
+                            gracefully_terminate_process(current_process)
+                            return val_f1
+                        
+                        # Custom early stopping for bad runs - stricter in later phases
+                        if current_epoch >= early_stop_epochs and val_f1 < min_f1_threshold:
+                            logger.info(f"Trial {trial.number} P{phase} stopped early due to poor performance")
+                            gracefully_terminate_process(current_process)
+                            return val_f1
+                        
+                        # Custom early stopping if no improvement for several epochs
+                        if no_improvement_count >= patience_threshold and current_epoch >= early_stop_epochs:
+                            logger.info(f"Trial {trial.number} P{phase} stopped early due to no improvement")
+                            gracefully_terminate_process(current_process)
+                            return best_val_f1
+                            
+            except (json.JSONDecodeError, IOError):
+                # File might be being written to
+                pass
+    
+    # Process completed naturally
+    if os.path.exists(metrics_file):
+        try:
+            with open(metrics_file, 'r') as f:
+                final_metrics = json.load(f)
+            final_val_f1 = final_metrics.get("val/fg/weighted_f1", 0)
+            logger.info(f"Trial {trial.number} P{phase} completed with final val_f1={final_val_f1:.4f}")
+            return final_val_f1
+        except (json.JSONDecodeError, IOError):
+            logger.warning(f"Trial {trial.number} P{phase} - Could not read final metrics file")
+            return best_val_f1  # Return the best observed value
+    
+    logger.warning(f"Trial {trial.number} P{phase} - No metrics file available")
+    return best_val_f1
+
+def apply_debugging_overrides(params):
+    """Apply debugging overrides to parameters"""
+    if DISABLE_AUX_LOSS:
+        params["initial_aux_bool_weight"] = 0.0
+        params["initial_aux_float_weight"] = 0.0
+        logger.info("OVERRIDE: Auxiliary loss disabled")
+        
+    if DISABLE_NIST_LSER:
+        params["nist_lser_weight"] = 0.0
+        logger.info("OVERRIDE: NIST LSER dataset disabled")
+        
+    if DISABLE_CHEMMOTION:
+        params["chemmotion_weight"] = 0.0
+        logger.info("OVERRIDE: ChemMotion dataset disabled")
+        
+    if DISABLE_CHEMMOTION_LSER:
+        params["chemmotion_lser_weight"] = 0.0
+        logger.info("OVERRIDE: ChemMotion LSER dataset disabled")
+        
+    if DISABLE_GRAPHFORMER:
+        params["graphformer_weight"] = 0.0
+        logger.info("OVERRIDE: Graphformer dataset disabled")
+        
+    if DISABLE_GRAPHFORMER_LSER:
+        params["graphformer_lser_weight"] = 0.0
+        logger.info("OVERRIDE: Graphformer LSER dataset disabled")
+        
+    return params
+
+def build_training_command(params, phase, metrics_file, trial_number):
+    """Build command array for main.py training script"""
+
+    trial_run_name = f"{STUDY}-p{phase}-t{trial_number}"
+
+    # Extract individual parameters
+    lr = params["lr"]
+    batch_size = params["batch_size"]
+    weight_decay = params["weight_decay"]
+    warmup_steps = params["warmup_steps"]
+    scheduler_t0 = params["scheduler_t0"]
+    scheduler_tmult = params["scheduler_tmult"]
+    
+    patch_size = params["patch_size"]
+    embed_dim = params["embed_dim"]
+    num_layers = params["num_layers"]
+    expansion_factor = params["expansion_factor"]
+    n_heads = params["n_heads"]
+    dropout_p = params["dropout_p"]
+    
+    use_noise = params["use_noise"]
+    use_mask = params["use_mask"]
+    use_shiftud = params["use_shiftud"]
+    use_shiftlr = params["use_shiftlr"]
+    use_revert = params["use_revert"]
+
+    # Extract auxiliary loss parameters
+    initial_aux_bool_weight = params["initial_aux_bool_weight"]
+    initial_aux_float_weight = params["initial_aux_float_weight"]
+    aux_epochs = params["aux_epochs"]
+    
+    # Extract dataset weights
+    nist_lser_weight = params["nist_lser_weight"]
+    chemmotion_weight = params["chemmotion_weight"]
+    chemmotion_lser_weight = params["chemmotion_lser_weight"]
+    graphformer_weight = params["graphformer_weight"]
+    graphformer_lser_weight = params["graphformer_lser_weight"]
+    
+    # Build command with base parameters
+    cmd = [
+        sys.executable, "main.py",
+        "mode=train",
+        "device=cuda:0",
+        f"experiment_name={EXPERIMENT_NAME}_phase{phase}",
+        f"dataset_id={DATASET_ID}",
+        f"model={MODEL}",
+        f"run_name={trial_run_name}",
+        
+        # Trainer params
+        f"trainer.lr={lr}",
+        f"trainer.batch_size={batch_size}",
+        f"trainer.weight_decay={weight_decay}",
+        f"trainer.warmup_steps={warmup_steps}",
+        f"trainer.scheduler_t0={scheduler_t0}",
+        f"trainer.scheduler_tmult={scheduler_tmult}",
+        
+        # Auxiliary loss parameters
+        f"trainer.initial_aux_bool_weight={initial_aux_bool_weight}",
+        f"trainer.initial_aux_float_weight={initial_aux_float_weight}",
+        f"trainer.aux_epochs={aux_epochs}",
+        
+        # Model params
+        f"model.patch_size={patch_size}",
+        f"model.embed_dim={embed_dim}",
+        f"model.num_layers={num_layers}",
+        f"model.expansion_factor={expansion_factor}",
+        f"model.n_heads={n_heads}",
+        f"model.dropout_p={dropout_p}",
+        
+        # Transform control flags
+        f"use_noise={use_noise}",
+        f"use_mask={use_mask}",
+        f"use_shiftud={use_shiftud}",
+        f"use_shiftlr={use_shiftlr}",
+        f"use_revert={use_revert}",
+        
+        # Fixed parameters - adjust based on phase
+        f"trainer.epochs={30 if phase == 3 else 20 if phase == 2 else 10}",
+        f"trainer.patience={20 if phase == 3 else 30 if phase == 2 else 40}",
+        f"metric_output_file={metrics_file}",
+        f"skip_checkpoints={phase != 3}",
+        
+        # Dataset weights
+        "nist_weight=1.0",  # Always fixed at 1.0
+        f"nist_lser_weight={nist_lser_weight}",
+        f"chemmotion_weight={chemmotion_weight}",
+        f"chemmotion_lser_weight={chemmotion_lser_weight}",
+        f"graphformer_weight={graphformer_weight}",
+        f"graphformer_lser_weight={graphformer_lser_weight}",
+        
+        # Add mask rate overrides if specified
+        *([f"min_mask_rate={FORCE_MASK_RATE}"] if FORCE_MASK_RATE is not None else []),
+        *([f"max_mask_rate={FORCE_MASK_RATE}"] if FORCE_MASK_RATE is not None else []),
+    ]
+    
+    return cmd, trial_run_name
+
+def track_best_run_in_study(study):
+    """Save the best run name in the study user attributes"""
+    if not study.best_trial:
+        return False
+    
+    # Get MLflow run name from best trial
+    best_run_name = study.best_trial.user_attrs.get('mlflow_run_name')
+    best_run_id = study.best_trial.user_attrs.get('mlflow_run_id')
+    
+    if best_run_name:
+        set_study_user_attr_safe(study, 'best_mlflow_run_name', best_run_name)
+        if best_run_id:
+            set_study_user_attr_safe(study, 'best_mlflow_run_id', best_run_id)
+        set_study_user_attr_safe(study, 'best_val_f1', study.best_value)
+        return True
+    return False
+
+def objective(trial):
+    """Optuna objective function for hyperparameter optimization"""
+    global current_process
+
+    # Clean up old trials if too many exist
+    trial_dirs = glob.glob("./trials/phase*_trial_*")
+    if len(trial_dirs) > 20:  # Keep only most recent 20 trials
+        for old_dir in sorted(trial_dirs, key=os.path.getctime)[:len(trial_dirs)-20]:
+            try:
+                shutil.rmtree(old_dir)
+            except:
+                pass  # Ignore errors
+
+    # Get current phase from study user attrs
+    phase = trial.study.user_attrs.get('phase', 1)
+    study_name = trial.study.study_name
+    
+    # Get parameters for current phase
+    params = suggest_parameters(trial, phase)
+    
+    # Apply debugging overrides
+    params = apply_debugging_overrides(params)
+    
+    # Create a unique directory for this trial's files
+    trial_metrics_dir = os.path.join("./trials", f"phase{phase}_trial_{trial.number}")
+    os.makedirs(trial_metrics_dir, exist_ok=True)
+    metrics_file = os.path.join(trial_metrics_dir, "metrics.json")
+    training_log = os.path.join(trial_metrics_dir, "training.log")
+    
+    # Build command for training and get unique run name
+    cmd, trial_run_name = build_training_command(params, phase, metrics_file, trial.number)
+    
+    # Log detailed trial information
+    transform_info = f"Transforms: noise={params['use_noise']}, mask={params['use_mask']}, " \
+                     f"shiftUD={params['use_shiftud']}, shiftLR={params['use_shiftlr']}, " \
+                     f"revert={params['use_revert']}"
+    model_info = f"Model: layers={params['num_layers']}, heads={params['n_heads']}, " \
+                 f"embed_dim={params['embed_dim']}, patch={params['patch_size']}"
+    phase_info = f"Phase {phase}"
+    logger.info(f"Starting trial {trial.number} ({phase_info}) with {model_info}, {transform_info}")
+    
+    # Log trial to MLflow directly for better tracking
+    try:
+        mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
+        with mlflow.start_run(run_name=trial_run_name) as run:
+            # Log study and trial information
+            mlflow.set_tag("optuna_study", study_name)
+            mlflow.set_tag("optuna_phase", phase)
+            mlflow.set_tag("optuna_trial", trial.number)
+            
+            # Log all parameters
+            mlflow.log_params(params)
+            
+            # Log debugging overrides
+            if DISABLE_AUX_LOSS:
+                mlflow.set_tag("override_aux_loss", "disabled")
+            if FORCE_MASK_RATE is not None:
+                mlflow.set_tag("override_mask_rate", FORCE_MASK_RATE)
+                
+            # Store MLflow run info in trial user attributes for later reference
+            trial.set_user_attr('mlflow_run_id', run.info.run_id)
+            trial.set_user_attr('mlflow_run_name', trial_run_name)
+            
+            logger.info(f"Linked trial {trial.number} to MLflow run: {trial_run_name}")
+    except Exception as e:
+        logger.warning(f"Failed to log trial to MLflow: {e}")
+    
+    try:
+        # Start the training process with output redirected to log file
+        with open(training_log, 'w') as log_file:
+            current_process = subprocess.Popen(
+                cmd, 
+                stdout=log_file, 
+                stderr=subprocess.STDOUT
+            )
+        
+        # Monitor the training process and handle early stopping
+        val_f1 = monitor_training_process(current_process, training_log, metrics_file, trial, phase)
+        
+        # If this is potentially a best run, mark it in the trial
+        if val_f1 > 0.7:  # Reasonably good F1 score
+            trial.set_user_attr('potential_best', True)
+            logger.info(f"Trial {trial.number} achieved high F1: {val_f1:.4f}")
+            
+            # Try to update MLflow with final result
+            try:
+                run_id = trial.user_attrs.get('mlflow_run_id')
+                if run_id:
+                    with mlflow.start_run(run_id=run_id):
+                        mlflow.log_metric("val_f1_final", val_f1)
+                        mlflow.set_tag("trial_complete", "true")
+            except Exception as e:
+                logger.warning(f"Failed to update MLflow run with final result: {e}")
+        
+        return val_f1
+        
+    except Exception as e:
+        logger.error(f"Error in trial {trial.number} P{phase}: {e}")
+        if current_process and current_process.poll() is None:
+            gracefully_terminate_process(current_process)
+        
+        # Log the error to MLflow if possible
+        try:
+            run_id = trial.user_attrs.get('mlflow_run_id')
+            if run_id:
+                with mlflow.start_run(run_id=run_id):
+                    mlflow.set_tag("error", str(e))
+        except:
+            pass
+            
+        return 0.0
+        
+    finally:
+        current_process = None
 
 def run_phase1(n_trials=30):
     """Phase 1: Wide exploration with per-trial phase advancement check"""
@@ -779,6 +574,8 @@ def run_phase1(n_trials=30):
                                             key=lambda x: x[1], 
                                             reverse=True)[:8])
             best_params = study.best_params
+
+            track_best_run_in_study(study)
             
             return study.best_value, best_params, important_params
             
@@ -849,6 +646,8 @@ def run_phase2(best_phase1_params, important_params, n_trials=20):
             logger.info(f"Top parameters for fine-tuning: {top_params}")
 
             best_params = study.best_params
+
+            track_best_run_in_study(study)
             
             return study.best_value, best_params, top_params
             
@@ -909,6 +708,8 @@ def run_phase3(best_phase2_params, top_params, n_trials=10):
         
         # Extract final best parameters
         final_best_params = study.best_params
+
+        track_best_run_in_study(study)
         
         return study.best_value, final_best_params
             
@@ -1004,13 +805,7 @@ def main():
                 phase3_value, final_best_params = run_phase3(best_phase2_params, top_params, n_trials=10)
                 
                 if final_best_params:
-                    logger.info(f"Phase 3 completed with best val_f1={phase3_value:.4f}")
-                    # Save final best parameters
-                    try:
-                        with open(f'best_params_{WORKER_ID}.json', 'w') as f:
-                            json.dump(final_best_params, f, indent=2)
-                    except Exception as e:
-                        logger.error(f"Failed to save best parameters: {e}")
+                    log_final_results(final_best_params, phase3_value)
                 else:
                     logger.warning("Phase 3 did not produce valid parameters")
             else:
@@ -1034,13 +829,7 @@ def main():
                     phase3_value, final_best_params = run_phase3(best_phase2_params, top_params, n_trials=15)
                     
                     if final_best_params:
-                        logger.info(f"Phase 3 completed with best val_f1={phase3_value:.4f}")
-                        # Save final best parameters
-                        try:
-                            with open(f'best_params_{WORKER_ID}.json', 'w') as f:
-                                json.dump(final_best_params, f, indent=2)
-                        except Exception as e:
-                            logger.error(f"Failed to save best parameters: {e}")
+                        log_final_results(final_best_params, phase3_value)
                     else:
                         logger.warning("Phase 3 did not produce valid parameters")
                 else:
@@ -1077,13 +866,7 @@ def main():
                         best_phase2_params, top_params, n_trials=15)
                     
                     if final_best_params:
-                        logger.info(f"Phase 3 completed with best val_f1={phase3_value:.4f}")
-                        # Save final best parameters
-                        try:
-                            with open(f'best_params_{WORKER_ID}.json', 'w') as f:
-                                json.dump(final_best_params, f, indent=2)
-                        except Exception as e:
-                            logger.error(f"Failed to save best parameters: {e}")
+                        log_final_results(final_best_params, phase3_value)
                     else:
                         logger.warning("Phase 3 did not produce valid parameters")
                 else:
@@ -1189,6 +972,37 @@ def cleanup_failed_trials(study_name, db_url, min_value=0.001):
     except Exception as e:
         print(f"Error cleaning up study {study_name}: {e}")
         
+def log_final_results(final_best_params, phase3_value):
+    """Log final optimization results to MLflow and save to file"""
+    logger.info(f"Phase 3 completed with best val_f1={phase3_value:.4f}")
+    
+    # Log to MLflow
+    mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
+    with mlflow.start_run(run_name=f"final_best_{STUDY}"):
+        mlflow.log_params(final_best_params)
+        mlflow.log_metric("best_val_f1", phase3_value)
+        mlflow.set_tag("study", STUDY)
+        mlflow.set_tag("worker_id", WORKER_ID)
+        mlflow.set_tag("completion_time", time.strftime("%Y-%m-%d %H:%M:%S"))
+        mlflow.set_tag("optimization_complete", "true")
+        
+        # Link to best runs from each phase
+        try:
+            for phase_num, study_name in [(1, PHASE1_STUDY_NAME), (2, PHASE2_STUDY_NAME), (3, PHASE3_STUDY_NAME)]:
+                study = optuna.load_study(study_name=study_name, storage=OPTUNA_DB_URL)
+                best_run_name = study.user_attrs.get('best_mlflow_run_name')
+                if best_run_name:
+                    mlflow.set_tag(f"best_run_phase{phase_num}", best_run_name)
+        except Exception as e:
+            logger.warning(f"Failed to link best phase runs: {e}")
+        
+    # Save to file
+    try:
+        with open(f'best_params_{STUDY}.json', 'w') as f:
+            json.dump(final_best_params, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save best parameters: {e}")
+
 if __name__ == "__main__":
     configure_mlflow_auth()
     cleanup_failed_trials(PHASE1_STUDY_NAME, OPTUNA_DB_URL)

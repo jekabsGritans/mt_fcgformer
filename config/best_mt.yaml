@@ -63,7 +63,7 @@ trainer:
   patience_threshold: 0.1
   weight_decay: 0.0033792444912131778
   warmup_steps: 577
-  scheduler_t0: 30
+  scheduler_t0: 3
   scheduler_tmult: 2
   
   # Add aux parameters (won't be used but needed for config structure)

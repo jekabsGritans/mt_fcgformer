@@ -36,7 +36,7 @@ def main(cfg: DictConfig):
     cfg.dataset_name = dataset_name
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    run_name = f"{cfg.mode}_{cfg.model.name}_{dataset_name}_{timestamp}"
+    run_name = f"{cfg.mode}_{cfg.model.name}_{dataset_name}_{timestamp}" if cfg.run_name is None else cfg.run_name
     with mlflow.start_run(run_name=run_name) as run:
         
         mlflow.set_tag("mode", cfg.mode)

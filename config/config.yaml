@@ -21,6 +21,8 @@ fg_names: [alkane, methyl, alkene, alkyne, alcohols, amines, nitriles, aromatics
 aux_bool_names: []
 aux_float_names: []
 
+run_name: null
+
 # weight accross datasets
 # these should probablt be derived for hyperparam opt
 nist_weight: 1.0
@@ -50,7 +52,7 @@ trainer:
 
   warmup_steps: 1000
 
-  scheduler_t0: 10
+  scheduler_t0: 3
   scheduler_tmult: 2
 
   checkpoint_interval_epochs: 2 # checkpoint every 2 epochs

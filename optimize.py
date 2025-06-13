@@ -326,8 +326,8 @@ def build_training_command(params, phase, metrics_file, trial_number):
         f"use_revert={use_revert}",
         
         # Fixed parameters - adjust based on phase
-        f"trainer.epochs={30 if phase == 3 else 20 if phase == 2 else 10}",
-        f"trainer.patience={20 if phase == 3 else 30 if phase == 2 else 40}",
+        f"trainer.epochs={50 if phase == 3 else 30 if phase == 2 else 20}",
+        f"trainer.patience={50 if phase == 3 else 30 if phase == 2 else 40}",
         f"metric_output_file={metrics_file}",
         f"skip_checkpoints={phase != 3}",
         

@@ -31,26 +31,31 @@ logger = logging.getLogger("optuna_optimization")
 # Generate a unique worker ID
 WORKER_ID = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
 
-# Fixed parameters
-MODEL = "mt_fcgformer"
+# Base configuration - central point for derived names
+BASE_NAME = "fcgformer_mt"
+MODEL_NAME = "mt_fcgformer"  # Model architecture name
 DATASET_ID = "157d4b53c95f4af88ee86fbcc319bce2"
-EXPERIMENT_NAME = "fulldata_mt_fcg-hyperparam-search"
-MIN_EPOCHS = 2
 
-# MLflow configuration
-MLFLOW_EXPERIMENT_NAME = f"fcgformer-optuna-optimization"
-MONITOR_EXPERIMENT_NAME = f"fcgformer-monitoring"
+# MLflow experiment names
+MLFLOW_EXP_OPTUNA = f"{BASE_NAME}-optuna"  # Optuna trials tracking
+MLFLOW_EXP_MONITOR = f"{BASE_NAME}-monitoring"  # Worker monitoring
+MLFLOW_EXP_TRAINING = f"{BASE_NAME}-training"  # For main.py training runs
 
-RUN_ID_MAP = {}  # Map trial IDs to MLflow run IDs
+# Optuna study names
+STUDY_BASE = f"{BASE_NAME}"
+STUDY_PHASE1 = f"{STUDY_BASE}-phase1-exploration"
+STUDY_PHASE2 = f"{STUDY_BASE}-phase2-exploitation" 
+STUDY_PHASE3 = f"{STUDY_BASE}-phase3-validation"
+
+# Map trial IDs to MLflow run IDs
+RUN_ID_MAP = {}
+
 # Set up Optuna database URL
 load_dotenv()
 OPTUNA_DB_URL = os.getenv("OPTUNA_DB_URL")
 
-# Define search strategy phases
-STUDY = "fulldata_mt_fcgformer"
-PHASE1_STUDY_NAME = f"{STUDY}-phase1-exploration"
-PHASE2_STUDY_NAME = f"{STUDY}-phase2-exploitation"
-PHASE3_STUDY_NAME = f"{STUDY}-phase3-validation"
+# Minimum number of epochs before pruning
+MIN_EPOCHS = 2
 
 # if DONT_OPTIMIZE env variable is set to true, exit script
 if os.getenv("DONT_OPTIMIZE", "false").lower() == "true":
@@ -63,7 +68,7 @@ current_process = None
 def update_job_status(status, error=None):
     """Report job status to MLflow without creating redundant runs"""
     try:
-        mlflow.set_experiment(MONITOR_EXPERIMENT_NAME)
+        mlflow.set_experiment(MLFLOW_EXP_MONITOR)
         
         # Use consistent run ID based on worker ID
         run_key = f"worker_{WORKER_ID}"
@@ -247,7 +252,7 @@ def monitor_training_process(current_process, training_log, metrics_file, trial,
 def build_training_command(params, phase, metrics_file, trial_number):
     """Build command array for main.py training script"""
 
-    trial_run_name = f"{STUDY}-p{phase}-t{trial_number}"
+    trial_run_name = f"{STUDY_BASE}-p{phase}-t{trial_number}"
 
     # Extract individual parameters
     lr = params["lr"]
@@ -287,9 +292,9 @@ def build_training_command(params, phase, metrics_file, trial_number):
         sys.executable, "main.py",
         "mode=train",
         "device=cuda:0",
-        f"experiment_name={EXPERIMENT_NAME}_phase{phase}",
+        f"experiment_name={MLFLOW_EXP_TRAINING}_phase{phase}",
         f"dataset_id={DATASET_ID}",
-        f"model={MODEL}",
+        f"model={MODEL_NAME}",
         f"run_name={trial_run_name}",
         
         # Trainer params
@@ -333,10 +338,6 @@ def build_training_command(params, phase, metrics_file, trial_number):
         f"chemmotion_lser_weight={chemmotion_lser_weight}",
         f"graphformer_weight={graphformer_weight}",
         f"graphformer_lser_weight={graphformer_lser_weight}",
-        
-        # Add mask rate overrides if specified
-        *([f"min_mask_rate={FORCE_MASK_RATE}"] if FORCE_MASK_RATE is not None else []),
-        *([f"max_mask_rate={FORCE_MASK_RATE}"] if FORCE_MASK_RATE is not None else []),
     ]
     
     return cmd, trial_run_name
@@ -398,7 +399,7 @@ def objective(trial):
     
     # Log trial to MLflow directly for better tracking
     try:
-        mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
+        mlflow.set_experiment(MLFLOW_EXP_OPTUNA)
         with mlflow.start_run(run_name=trial_run_name) as run:
             # Log study and trial information
             mlflow.set_tag("optuna_study", study_name)
@@ -408,12 +409,6 @@ def objective(trial):
             # Log all parameters
             mlflow.log_params(params)
             
-            # Log debugging overrides
-            if DISABLE_AUX_LOSS:
-                mlflow.set_tag("override_aux_loss", "disabled")
-            if FORCE_MASK_RATE is not None:
-                mlflow.set_tag("override_mask_rate", FORCE_MASK_RATE)
-                
             # Store MLflow run info in trial user attributes for later reference
             trial.set_user_attr('mlflow_run_id', run.info.run_id)
             trial.set_user_attr('mlflow_run_name', trial_run_name)
@@ -479,7 +474,7 @@ def run_phase1(n_trials=30):
     
     # Create phase 1 study with RandomSampler for better exploration
     study = optuna.create_study(
-        study_name=PHASE1_STUDY_NAME,
+        study_name=STUDY_PHASE1,
         storage=OPTUNA_DB_URL,
         load_if_exists=True,
         direction="maximize",
@@ -550,7 +545,7 @@ def run_phase2(best_phase1_params, important_params, n_trials=20):
     
     # Create phase 2 study with TPESampler for exploitation
     study = optuna.create_study(
-        study_name=PHASE2_STUDY_NAME,
+        study_name=STUDY_PHASE2,
         storage=OPTUNA_DB_URL,
         load_if_exists=True,
         direction="maximize",
@@ -623,7 +618,7 @@ def run_phase3(best_phase2_params, top_params, n_trials=10):
     
     # Create phase 3 study with focused TPESampler
     study = optuna.create_study(
-        study_name=PHASE3_STUDY_NAME,
+        study_name=STUDY_PHASE3,
         storage=OPTUNA_DB_URL,
         load_if_exists=True,
         direction="maximize",
@@ -677,7 +672,7 @@ def run_phase3(best_phase2_params, top_params, n_trials=10):
 def should_skip_to_next_phase(phase_name, min_trials=30):
     """Determine if enough trials have been completed for a given phase"""
     try:
-        study = optuna.load_study(study_name=phase_name, storage=OPTUNA_DB_URL)
+        study = optuna.load_study(study_name=phase_name, storage=OPTUNA_DB_URL)# type: ignore
         # Count only COMPLETE trials (not FAIL, PRUNED, etc.)
         completed_trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
         return len(completed_trials) >= min_trials
@@ -688,13 +683,13 @@ def should_skip_to_next_phase(phase_name, min_trials=30):
 def get_current_phase():
     """Determine which phase we should be working on based on trial counts"""
     # If phase 3 has trials, join phase 3
-    if should_skip_to_next_phase(PHASE3_STUDY_NAME, min_trials=5):
+    if should_skip_to_next_phase(STUDY_PHASE3, min_trials=5):
         return 3
     # If phase 2 has enough trials, join phase 3
-    elif should_skip_to_next_phase(PHASE2_STUDY_NAME, min_trials=20):
+    elif should_skip_to_next_phase(STUDY_PHASE2, min_trials=20):
         return 3
     # If phase 1 has enough trials, join phase 2
-    elif should_skip_to_next_phase(PHASE1_STUDY_NAME, min_trials=30):
+    elif should_skip_to_next_phase(STUDY_PHASE1, min_trials=30):
         return 2
     # Otherwise start from phase 1
     else:
@@ -704,7 +699,7 @@ def get_parameters_for_phase(phase):
     """Get best parameters from the previous phase"""
     if phase == 3:
         try:
-            study2 = optuna.load_study(study_name=PHASE2_STUDY_NAME, storage=OPTUNA_DB_URL)
+            study2 = optuna.load_study(study_name=STUDY_PHASE2, storage=OPTUNA_DB_URL) # type: ignore
             best_phase2_params = study2.best_params
             top_params = study2.user_attrs.get("top_params", [])
             return best_phase2_params, top_params
@@ -714,7 +709,7 @@ def get_parameters_for_phase(phase):
     
     elif phase == 2:
         try:
-            study1 = optuna.load_study(study_name=PHASE1_STUDY_NAME, storage=OPTUNA_DB_URL)
+            study1 = optuna.load_study(study_name=STUDY_PHASE1, storage=OPTUNA_DB_URL) # type: ignore
             best_phase1_params = study1.best_params
             important_params = study1.user_attrs.get("important_params", {})
             return best_phase1_params, important_params
@@ -907,8 +902,7 @@ def cleanup_failed_trials(study_name, db_url, min_value=0.001):
                     
             # Make sure the enqueued trials are processed
             if temp_study.trials:
-                new_study.optimize(lambda trial: temp_study.trials[trial.number].value, 
-                                  n_trials=len(temp_study.trials))
+                new_study.optimize(lambda trial: temp_study.trials[trial.number].value, n_trials=len(temp_study.trials)) # type: ignore
             
             # Delete the temporary study
             optuna.delete_study(study_name=temp_study_name, storage=db_url)
@@ -930,19 +924,19 @@ def log_final_results(final_best_params, phase3_value):
     logger.info(f"Phase 3 completed with best val_f1={phase3_value:.4f}")
     
     # Log to MLflow
-    mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
-    with mlflow.start_run(run_name=f"final_best_{STUDY}"):
+    mlflow.set_experiment(MLFLOW_EXP_OPTUNA)
+    with mlflow.start_run(run_name=f"final_best_{STUDY_BASE}"):
         mlflow.log_params(final_best_params)
         mlflow.log_metric("best_val_f1", phase3_value)
-        mlflow.set_tag("study", STUDY)
+        mlflow.set_tag("study", STUDY_BASE)
         mlflow.set_tag("worker_id", WORKER_ID)
         mlflow.set_tag("completion_time", time.strftime("%Y-%m-%d %H:%M:%S"))
         mlflow.set_tag("optimization_complete", "true")
         
         # Link to best runs from each phase
         try:
-            for phase_num, study_name in [(1, PHASE1_STUDY_NAME), (2, PHASE2_STUDY_NAME), (3, PHASE3_STUDY_NAME)]:
-                study = optuna.load_study(study_name=study_name, storage=OPTUNA_DB_URL)
+            for phase_num, study_name in [(1, STUDY_PHASE1), (2, STUDY_PHASE2), (3, STUDY_PHASE3)]:
+                study = optuna.load_study(study_name=study_name, storage=OPTUNA_DB_URL) # type: ignore
                 best_run_name = study.user_attrs.get('best_mlflow_run_name')
                 if best_run_name:
                     mlflow.set_tag(f"best_run_phase{phase_num}", best_run_name)
@@ -951,14 +945,14 @@ def log_final_results(final_best_params, phase3_value):
         
     # Save to file
     try:
-        with open(f'best_params_{STUDY}.json', 'w') as f:
+        with open(f'best_params_{STUDY_BASE}.json', 'w') as f:
             json.dump(final_best_params, f, indent=2)
     except Exception as e:
         logger.error(f"Failed to save best parameters: {e}")
 
 if __name__ == "__main__":
     configure_mlflow_auth()
-    cleanup_failed_trials(PHASE1_STUDY_NAME, OPTUNA_DB_URL)
-    cleanup_failed_trials(PHASE2_STUDY_NAME, OPTUNA_DB_URL)
-    cleanup_failed_trials(PHASE3_STUDY_NAME, OPTUNA_DB_URL)
+    cleanup_failed_trials(STUDY_PHASE1, OPTUNA_DB_URL)
+    cleanup_failed_trials(STUDY_PHASE2, OPTUNA_DB_URL)
+    cleanup_failed_trials(STUDY_PHASE3, OPTUNA_DB_URL)
     main()

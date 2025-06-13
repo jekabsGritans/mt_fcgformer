@@ -320,24 +320,25 @@ class MultiTokenFCGFormerModule(NeuralNetworkModule):
         """
         if not self.attention_maps:
             return None
+        
+        with torch.no_grad():
+            # Get attention from specified layer
+            attention = self.attention_maps[layer_idx]
             
-        # Get attention from specified layer
-        attention = self.attention_maps[layer_idx]
-        
-        # Extract attention maps for each functional group token (averaged across heads)
-        token_attentions = []
-        
-        # Calculate the offset for patch indices - account for both FG tokens and aux token
-        patch_start_idx = self.fg_target_dim
-        if self.has_aux:
-            patch_start_idx += 1  # Add 1 if auxiliary token is present
-        
-        for token_idx in range(self.fg_target_dim):
-            # Get attention from this token to all patches (exclude ALL tokens)
-            token_attention = attention[:, :, token_idx, patch_start_idx:].mean(dim=1)  # Average over heads
-            token_attentions.append(token_attention)
+            # Extract attention maps for each functional group token (averaged across heads)
+            token_attentions = []
             
-        return token_attentions
+            # Calculate the offset for patch indices - account for both FG tokens and aux token
+            patch_start_idx = self.fg_target_dim
+            if self.has_aux:
+                patch_start_idx += 1  # Add 1 if auxiliary token is present
+            
+            for token_idx in range(self.fg_target_dim):
+                # Get attention from this token to all patches (exclude ALL tokens)
+                token_attention = attention[:, :, token_idx, patch_start_idx:].mean(dim=1)  # Average over heads
+                token_attentions.append(token_attention)
+                
+            return token_attentions
 
 class MultiTokenFCGFormer(BaseModel):
     """
@@ -451,65 +452,66 @@ class MultiTokenFCGFormer(BaseModel):
 
         self.nn.eval()
 
-        for spectrum_x, spectrum_y in zip(spectra_x, spectra_y):
-            # Interpolate to fixed size
-            spectrum = interpolate(x=spectrum_x, y=spectrum_y, min_x=400, max_x=4000, num_points=3600)
+        with torch.no_grad():
+            for spectrum_x, spectrum_y in zip(spectra_x, spectra_y):
+                # Interpolate to fixed size
+                spectrum = interpolate(x=spectrum_x, y=spectrum_y, min_x=400, max_x=4000, num_points=3600)
 
-            # Preprocess spectrum
-            spectrum = torch.from_numpy(spectrum).float()
-            spectrum = self.spectrum_eval_transform(spectrum)
-            
-            # Add batch dimension
-            spectrum = spectrum.unsqueeze(0)
+                # Preprocess spectrum
+                spectrum = torch.from_numpy(spectrum).float()
+                spectrum = self.spectrum_eval_transform(spectrum)
+                
+                # Add batch dimension
+                spectrum = spectrum.unsqueeze(0)
 
-            # Forward pass - extract ONLY functional group logits
-            outputs = self.nn(spectrum)
-            logits = outputs["fg_logits"]  # Only care about functional group logits
-            probabilities = torch.sigmoid(logits).squeeze(0).tolist()
+                # Forward pass - extract ONLY functional group logits
+                outputs = self.nn(spectrum)
+                logits = outputs["fg_logits"]  # Only care about functional group logits
+                probabilities = torch.sigmoid(logits).squeeze(0).tolist()
 
-            # Get token-specific attention maps
-            token_attentions = self.nn.get_token_attention()
-            
-            # Apply known targets if specified in params
-            if params is not None:
-                for target in self.fg_names:
-                    if target in params:
-                        if params[target] is not None:
-                            probabilities[self.fg_names.index(target)] = 1.0 if params[target] else 0.0
+                # Get token-specific attention maps
+                token_attentions = self.nn.get_token_attention()
+                
+                # Apply known targets if specified in params
+                if params is not None:
+                    for target in self.fg_names:
+                        if target in params:
+                            if params[target] is not None:
+                                probabilities[self.fg_names.index(target)] = 1.0 if params[target] else 0.0
 
-            # Filter predictions by threshold
-            out_probs = []
-            out_targets = []
-            out_attention = []
-            
-            for idx, (prob, target) in enumerate(zip(probabilities, self.fg_names)):
-                if prob > threshold:
-                    out_probs.append(prob)
-                    out_targets.append(target)
-                    
-                    # Create attention regions for this target's token
-                    if token_attentions is not None and idx < len(token_attentions):
-                        target_attention = token_attentions[idx][0].cpu().numpy()  # First batch item
-                        patch_size = self.nn.patch_embed.patch_size
-                        num_patches = len(target_attention)
+                # Filter predictions by threshold
+                out_probs = []
+                out_targets = []
+                out_attention = []
+                
+                for idx, (prob, target) in enumerate(zip(probabilities, self.fg_names)):
+                    if prob > threshold:
+                        out_probs.append(prob)
+                        out_targets.append(target)
                         
-                        # Calculate wavenumber for each patch with this token's attention
-                        wavenumbers_per_patch = []
-                        for i in range(num_patches):
-                            start_wn = 400 + (i * patch_size)
-                            end_wn = start_wn + patch_size
-                            score = float(target_attention[i])
-                            wavenumbers_per_patch.append((start_wn, end_wn, score))
-                        
-                        out_attention.append(wavenumbers_per_patch)
-                    else:
-                        # Fallback if no attention maps available
-                        out_attention.append([])
+                        # Create attention regions for this target's token
+                        if token_attentions is not None and idx < len(token_attentions):
+                            target_attention = token_attentions[idx][0].cpu().numpy()  # First batch item
+                            patch_size = self.nn.patch_embed.patch_size
+                            num_patches = len(target_attention)
+                            
+                            # Calculate wavenumber for each patch with this token's attention
+                            wavenumbers_per_patch = []
+                            for i in range(num_patches):
+                                start_wn = 400 + (i * patch_size)
+                                end_wn = start_wn + patch_size
+                                score = float(target_attention[i])
+                                wavenumbers_per_patch.append((start_wn, end_wn, score))
+                            
+                            out_attention.append(wavenumbers_per_patch)
+                        else:
+                            # Fallback if no attention maps available
+                            out_attention.append([])
 
-            results.append({
-                "positive_targets": out_targets,
-                "positive_probabilities": out_probs,
-                "attention": out_attention
-            })
+                results.append({
+                    "positive_targets": out_targets,
+                    "positive_probabilities": out_probs,
+                    "attention": out_attention
+                })
 
-        return results
+            return results

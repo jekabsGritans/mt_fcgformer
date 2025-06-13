@@ -259,7 +259,7 @@ class MLFlowDatasetAggregator:
         total_dataset_size = len(combined_dataset)
         
         # Use custom collate function for mask generation
-        collate_fn = self._collate_with_masks if generate_masks else None
+        collate_fn = self._collate_with_masks_gpu if generate_masks else None
         
         if self.split == "train":
             if len(dataset_names) > 1:
@@ -297,74 +297,55 @@ class MLFlowDatasetAggregator:
 
         return dataloader
         
-    def _collate_with_masks(self, batch):
-        """Custom collate function that adds random masks to batches"""
+
+    def _collate_with_masks_gpu(self, batch):
+        """GPU-optimized mask generation"""
         # Standard collation
         collated_batch = torch.utils.data.default_collate(batch)
         
-        # Add masks to batch
+        # Get targets and move to GPU if not already there
         targets = collated_batch["fg_targets"]
+        device = targets.device
+        
         batch_size, num_targets = targets.shape
-        total_labels = batch_size * num_targets
         
-        # Create mask tensor (1 = use this label, 0 = mask/unknown)
-        mask = torch.ones_like(targets)
+        # Create mask tensor on GPU
+        mask = torch.ones_like(targets, device=device)
         
-        # Use min and max mask rates from config 
-        min_mask_rate = self.cfg.min_mask_rate
-        max_mask_rate = self.cfg.max_mask_rate
+        # Get mask rates
+        min_mask_rate = torch.tensor(self.cfg.min_mask_rate, device=device)
+        max_mask_rate = torch.tensor(self.cfg.max_mask_rate, device=device)
         
-        # Random mask rate between min and max
-        global_mask_rate = min_mask_rate + torch.rand(1).item() * (max_mask_rate - min_mask_rate)
-        min_masks_required = int(total_labels * global_mask_rate)
+        # Random mask rate (on GPU)
+        global_mask_rate = min_mask_rate + torch.rand(1, device=device) * (max_mask_rate - min_mask_rate)
+        min_masks_required = int((batch_size * num_targets * global_mask_rate).item())
         
-        # Apply class-aware masking strategy
-        total_masked = 0
+        # Create one large mask tensor - more vectorized
+        flat_targets = targets.view(-1)
+        flat_mask = mask.view(-1)
         
-        # First pass - apply class-aware masking
-        for i in range(num_targets):
-            # Get class distribution for this target
-            positives = targets[:, i].float().mean().item()
+        # Get positions of positive and negative examples
+        pos_positions = torch.nonzero(flat_targets, as_tuple=True)[0]
+        neg_positions = torch.nonzero(flat_targets == 0, as_tuple=True)[0]
+        
+        # Compute number to mask based on ratios
+        pos_ratio = pos_positions.numel() / flat_targets.numel()
+        num_pos_to_mask = min(
+            pos_positions.numel(),
+            int(min_masks_required * min(1.0, pos_ratio * 3))
+        )
+        num_neg_to_mask = min_masks_required - num_pos_to_mask
+        
+        # Sample random indices efficiently
+        if pos_positions.numel() > 0:
+            pos_to_mask = pos_positions[torch.randperm(pos_positions.numel(), device=device)[:num_pos_to_mask]]
+            flat_mask[pos_to_mask] = 0
             
-            # Higher base mask rate to get closer to our 50-100% target
-            base_mask_rate = 0.7
-            
-            # Adjust mask rate based on class imbalance
-            # Rare positive classes get masked slightly less often
-            pos_mask_rate = base_mask_rate * min(1.0, positives * 5)
-            neg_mask_rate = base_mask_rate * 1.2  # Mask negatives more aggressively
-            
-            # Create masks for positive and negative examples separately
-            pos_indices = targets[:, i].nonzero().squeeze(-1)
-            neg_indices = (targets[:, i] == 0).nonzero().squeeze(-1)
-            
-            # Randomly mask positive examples
-            if len(pos_indices) > 0:
-                num_pos_to_mask = max(1, int(len(pos_indices) * pos_mask_rate))
-                pos_to_mask = pos_indices[torch.randperm(len(pos_indices))[:num_pos_to_mask]]
-                mask[pos_to_mask, i] = 0
-                total_masked += len(pos_to_mask)
-            
-            # Randomly mask negative examples
-            if len(neg_indices) > 0:
-                num_neg_to_mask = max(1, int(len(neg_indices) * neg_mask_rate))
-                neg_to_mask = neg_indices[torch.randperm(len(neg_indices))[:num_neg_to_mask]]
-                mask[neg_to_mask, i] = 0
-                total_masked += len(neg_to_mask)
+        if neg_positions.numel() > 0 and num_neg_to_mask > 0:
+            neg_to_mask = neg_positions[torch.randperm(neg_positions.numel(), device=device)[:num_neg_to_mask]]
+            flat_mask[neg_to_mask] = 0
         
-        # If we haven't masked enough labels, mask more randomly
-        if total_masked < min_masks_required:
-            # Create a mask of currently unmasked positions
-            additional_needed = min_masks_required - total_masked
-            unmasked = mask.nonzero()
-            
-            # Randomly select additional positions to mask
-            if len(unmasked) > 0:
-                indices = torch.randperm(len(unmasked))[:min(additional_needed, len(unmasked))]
-                additional_to_mask = unmasked[indices]
-                mask[additional_to_mask[:, 0], additional_to_mask[:, 1]] = 0
-        
-        # Add mask to batch
-        collated_batch["fg_target_mask"] = mask
+        # Reshape back and add to batch
+        collated_batch["fg_target_mask"] = flat_mask.view(batch_size, num_targets)
         
         return collated_batch

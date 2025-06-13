@@ -285,7 +285,7 @@ class Trainer:
                         cosine_epochs = cosine_steps / len(self.train_loader)
                         self.scheduler.step(cosine_epochs) # type: ignore
 
-                    batch = dict_to_device(batch, self.cfg.device)
+                    # batch = dict_to_device(batch, self.cfg.device)
 
                     step_out = self.nn.step(batch)
                     loss = step_out["loss"]

@@ -251,7 +251,7 @@ class MLFlowDatasetAggregator:
                 dataset_name = f"{source_name}_lser" if is_lser else source_name
                 self.datasets[dataset_name] = dataset
         
-    def get_loader(self, batch_size: int) -> GPUBatchSampler:
+    def get_loader(self, batch_size: int) -> GPUBatchSampler | DataLoader:
         if self.split == "train":
             # Get dataset weights
             dataset_weights = {}
@@ -276,7 +276,7 @@ class MLFlowDatasetAggregator:
                 combined_dataset, 
                 batch_size=batch_size,
                 shuffle=False,
-                pin_memory=True
+                pin_memory=False
             )
 
     

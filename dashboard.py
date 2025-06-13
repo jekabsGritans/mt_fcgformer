@@ -4,19 +4,18 @@ import threading
 import time
 from datetime import datetime
 
-import numpy as np
 import optuna
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template
 
 # Load database configuration
 load_dotenv()
-OPTUNA_DB_URL="mysql+pymysql://user:hu4sie2Aiwee@192.168.6.5:3307/optuna"
+OPTUNA_DB_URL = os.getenv("OPTUNA_DB_URL", "mysql+pymysql://user:hu4sie2Aiwee@192.168.6.5:3307/optuna")
 
 # Study names from your optimization script
-PHASE1_STUDY_NAME = "stateful_mt_fcgformer-phase1-exploration"
-PHASE2_STUDY_NAME = "stateful_mt_fcgformer-phase2-exploitation" 
-PHASE3_STUDY_NAME = "stateful_mt_fcgformer-phase3-validation"
+PHASE1_STUDY_NAME = "fulldata_mt_fcgformer-phase1-exploration"
+PHASE2_STUDY_NAME = "fulldata_mt_fcgformer-phase2-exploitation" 
+PHASE3_STUDY_NAME = "fulldata_mt_fcgformer-phase3-validation"
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -105,7 +104,6 @@ def get_data():
 @app.route('/api/best_trials')
 def get_best_trials():
     """Get best trials with detailed info"""
-    # This endpoint can be expanded to include more detailed analysis
     best_trials = {}
     
     for phase_name, study_name in [("phase1", PHASE1_STUDY_NAME), 
@@ -124,80 +122,6 @@ def get_best_trials():
             best_trials[phase_name] = {"error": "Not available"}
     
     return jsonify(best_trials)
-
-# Add right after your get_best_trials() function
-
-@app.route('/api/param_importance/<phase>')
-def get_param_importance(phase):
-    """Get parameter importance visualization data"""
-    study_name = {
-        "phase1": PHASE1_STUDY_NAME,
-        "phase2": PHASE2_STUDY_NAME,
-        "phase3": PHASE3_STUDY_NAME
-    }.get(phase)
-    
-    if not study_name:
-        return jsonify({"error": "Invalid phase specified"})
-    
-    try:
-        study = optuna.load_study(study_name=study_name, storage=OPTUNA_DB_URL)
-        
-        # Get all completed trials with values
-        trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE and t.value is not None]
-        
-        if len(trials) < 5:
-            return jsonify({"error": "Not enough completed trials for visualization"})
-        
-        # Get parameter values for all trials
-        param_values = {}
-        scores = []
-        
-        for trial in trials:
-            scores.append(trial.value)
-            for param, value in trial.params.items():
-                if param not in param_values:
-                    param_values[param] = []
-                param_values[param].append(value)
-        
-        # Basic parameter importance using correlation
-        importances = {}
-        for param, values in param_values.items():
-            # Convert categorical to numeric if needed
-            numeric_values = []
-            for v in values:
-                if isinstance(v, (int, float)):
-                    numeric_values.append(float(v))
-                elif v == "True":
-                    numeric_values.append(1.0)
-                elif v == "False":
-                    numeric_values.append(0.0)
-                else:
-                    # Skip parameters we can't easily convert
-                    numeric_values = None
-                    break
-            
-            # Calculate correlation if we have numeric values
-            if numeric_values:
-                try:
-                    corr = abs(np.corrcoef(numeric_values, scores)[0, 1])
-                    if not np.isnan(corr):
-                        importances[param] = float(corr)
-                except:
-                    pass
-        
-        # Return the data
-        return jsonify({
-            "importances": importances,
-            "trial_data": [
-                {
-                    "trial_id": t.number,
-                    "value": t.value,
-                    "params": t.params
-                } for t in trials
-            ]
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)})
 
 @app.route('/best_runs')
 def best_runs():
@@ -220,66 +144,6 @@ def best_runs():
     
     return render_template('best_runs.html', best_runs=best_runs)
 
-@app.route('/api/parallel_coords/<phase>')
-def get_parallel_coords_data(phase):
-    """Get data for parallel coordinates plot"""
-    study_name = {
-        "phase1": PHASE1_STUDY_NAME,
-        "phase2": PHASE2_STUDY_NAME,
-        "phase3": PHASE3_STUDY_NAME
-    }.get(phase)
-    
-    if not study_name:
-        return jsonify({"error": "Invalid phase"})
-    
-    try:
-        study = optuna.load_study(study_name=study_name, storage=OPTUNA_DB_URL)
-        trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE and t.value is not None]
-        
-        if not trials:
-            return jsonify({"error": "No completed trials"})
-            
-        # Get parameter names from first trial
-        param_names = list(trials[0].params.keys())
-        
-        # Create dimensions for parallel coordinates
-        dimensions = []
-        for param in param_names:
-            values = [t.params.get(param) for t in trials if param in t.params]
-            
-            # Handle different parameter types
-            if all(isinstance(v, (int, float)) for v in values):
-                dimensions.append({
-                    "label": param,
-                    "values": values,
-                    "range": [min(values), max(values)]
-                })
-            elif all(v in [True, False, "True", "False"] for v in values):
-                # Convert boolean to numeric
-                numeric_values = [1 if v in [True, "True"] else 0 for v in values]
-                dimensions.append({
-                    "label": param,
-                    "values": numeric_values,
-                    "tickvals": [0, 1],
-                    "ticktext": ["False", "True"]
-                })
-        
-        # Add the objective value as the last dimension
-        objective_values = [t.value for t in trials]
-        dimensions.append({
-            "label": "Score",
-            "values": objective_values,
-            "range": [min(objective_values), max(objective_values)]
-        })
-        
-        return jsonify({
-            "dimensions": dimensions,
-            "trial_ids": [t.number for t in trials]
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)})
-
-
 # Create template directory
 os.makedirs('templates', exist_ok=True)
 
@@ -291,11 +155,10 @@ with open('templates/dashboard.html', 'w') as f:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Optuna Hyperparameter Optimization Dashboard</title>
+    <title>FCGFormer Optimization Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
     <style>
         .phase-card {
             margin-bottom: 20px;
@@ -317,6 +180,8 @@ with open('templates/dashboard.html', 'w') as f:
             background-color: #f8f9fa;
             padding: 10px;
             border-radius: 5px;
+            overflow-x: auto;
+            max-height: 300px;
         }
     </style>
 </head>
@@ -379,10 +244,6 @@ with open('templates/dashboard.html', 'w') as f:
                             <h6>Best Parameters:</h6>
                             <pre id="phase2-params-json"></pre>
                         </div>
-                        <div id="phase2-important" class="mt-3">
-                            <h6>Important Parameters:</h6>
-                            <pre id="phase2-important-json"></pre>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -405,92 +266,30 @@ with open('templates/dashboard.html', 'w') as f:
                             <h6>Best Parameters:</h6>
                             <pre id="phase3-params-json"></pre>
                         </div>
-                        <div id="phase3-top" class="mt-3">
-                            <h6>Top Parameters:</h6>
-                            <pre id="phase3-top-json"></pre>
-                        </div>
                     </div>
                 </div>
             </div>
         </div>
         
         <div class="row mt-4">
-            <div class="col-md-12">
+            <div class="col-12">
                 <div class="card">
                     <div class="card-header bg-dark text-white">
-                        Parameter Analysis
+                        MLflow Best Runs
                     </div>
                     <div class="card-body">
-                        <ul class="nav nav-tabs" id="paramTabs" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active" id="importance-tab" data-bs-toggle="tab" data-bs-target="#importance" type="button" role="tab">
-                                    Parameter Importance
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="parallel-tab" data-bs-toggle="tab" data-bs-target="#parallel" type="button" role="tab">
-                                    Parameter Relationships
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link" id="distribution-tab" data-bs-toggle="tab" data-bs-target="#distribution" type="button" role="tab">
-                                    Parameter Distributions
-                                </button>
-                            </li>
-                        </ul>
-                        
-                        <div class="tab-content mt-3" id="paramTabsContent">
-                            <div class="tab-pane fade show active" id="importance" role="tabpanel">
-                                <div class="row mb-3">
-                                    <div class="col-md-4">
-                                        <select id="importance-phase" class="form-select">
-                                            <option value="phase1">Phase 1: Exploration</option>
-                                            <option value="phase2">Phase 2: Exploitation</option>
-                                            <option value="phase3">Phase 3: Validation</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div id="param-importance-plot"></div>
-                            </div>
-                            
-                            <div class="tab-pane fade" id="parallel" role="tabpanel">
-                                <div class="row mb-3">
-                                    <div class="col-md-4">
-                                        <select id="parallel-phase" class="form-select">
-                                            <option value="phase1">Phase 1: Exploration</option>
-                                            <option value="phase2">Phase 2: Exploitation</option>
-                                            <option value="phase3">Phase 3: Validation</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div id="parallel-coords-plot"></div>
-                            </div>
-                            
-                            <div class="tab-pane fade" id="distribution" role="tabpanel">
-                                <div class="row mb-3">
-                                    <div class="col-md-4">
-                                        <select id="dist-phase" class="form-select">
-                                            <option value="phase1">Phase 1: Exploration</option>
-                                            <option value="phase2">Phase 2: Exploitation</option>
-                                            <option value="phase3">Phase 3: Validation</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <select id="param-select" class="form-select">
-                                            <option value="">Select parameter</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <select id="top-n" class="form-select">
-                                            <option value="5">Top 5 trials</option>
-                                            <option value="10">Top 10 trials</option>
-                                            <option value="all">All trials</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div id="param-dist-plot"></div>
-                            </div>
-                        </div>
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Phase</th>
+                                    <th>Best F1</th>
+                                    <th>Run Name</th>
+                                </tr>
+                            </thead>
+                            <tbody id="best-runs-body">
+                                <tr><td colspan="3">Loading...</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -498,7 +297,7 @@ with open('templates/dashboard.html', 'w') as f:
     </div>
     
     <button id="refresh-btn" class="btn btn-primary refresh-btn">
-        <i class="bi bi-arrow-repeat"></i> Refresh
+        Refresh
     </button>
 
     <script>
@@ -516,6 +315,13 @@ with open('templates/dashboard.html', 'w') as f:
                 .then(response => response.json())
                 .then(data => {
                     updateDashboard(data);
+                    
+                    // Get best runs
+                    fetch('/api/best_trials')
+                        .then(response => response.json())
+                        .then(bestTrials => {
+                            updateBestRuns(bestTrials);
+                        });
                 });
         }
         
@@ -592,17 +398,6 @@ with open('templates/dashboard.html', 'w') as f:
                     JSON.stringify(data.best_params, null, 2);
             } else {
                 document.getElementById(`${phase}-params-json`).textContent = "No data yet";
-            }
-            
-            // Update phase-specific data
-            if (phase === 'phase2' && data.user_attrs.important_params) {
-                document.getElementById(`${phase}-important-json`).textContent = 
-                    JSON.stringify(data.user_attrs.important_params, null, 2);
-            }
-            
-            if (phase === 'phase3' && data.user_attrs.top_params) {
-                document.getElementById(`${phase}-top-json`).textContent = 
-                    JSON.stringify(data.user_attrs.top_params, null, 2);
             }
         }
         
@@ -709,254 +504,91 @@ with open('templates/dashboard.html', 'w') as f:
             }
             overviewElement.insertAdjacentElement('afterend', infoDiv);
         }
-
-        // Parameter importance visualization
-        function updateParamImportance() {
-            const phase = document.getElementById('importance-phase').value;
+        
+        function updateBestRuns() {
+            const tbodyElement = document.getElementById('best-runs-body');
             
-            fetch(`/api/param_importance/${phase}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        document.getElementById('param-importance-plot').innerHTML = 
-                            `<div class="alert alert-warning">${data.error}</div>`;
-                        return;
-                    }
+            fetch('/best_runs')
+                .then(response => response.text())
+                .then(html => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const rows = [];
                     
-                    // Sort parameters by importance
-                    const sortedImportance = Object.entries(data.importances)
-                        .sort((a, b) => b[1] - a[1])
-                        .slice(0, 10); // Show top 10 parameters
-                    
-                    const params = sortedImportance.map(d => d[0]);
-                    const values = sortedImportance.map(d => d[1]);
-                    
-                    const plotData = [{
-                        type: 'bar',
-                        x: params,
-                        y: values,
-                        marker: {
-                            color: values.map(v => `rgba(66, 133, 244, ${v})`),
-                            line: {
-                                color: 'rgb(8, 48, 107)',
-                                width: 1.5
-                            }
+                    for (let phase = 1; phase <= 3; phase++) {
+                        const phaseKey = `phase${phase}`;
+                        const phaseData = doc.querySelector(`#${phaseKey}-data`);
+                        
+                        if (phaseData) {
+                            const runName = phaseData.dataset.runName || "N/A";
+                            const valF1 = phaseData.dataset.valF1 || "N/A";
+                            
+                            rows.push(`
+                                <tr>
+                                    <td>Phase ${phase}</td>
+                                    <td>${valF1}</td>
+                                    <td>${runName}</td>
+                                </tr>
+                            `);
+                        } else {
+                            rows.push(`
+                                <tr>
+                                    <td>Phase ${phase}</td>
+                                    <td colspan="2">Data not available</td>
+                                </tr>
+                            `);
                         }
-                    }];
+                    }
                     
-                    const layout = {
-                        title: 'Parameter Importance',
-                        xaxis: {
-                            title: 'Parameter',
-                            tickangle: 45
-                        },
-                        yaxis: {
-                            title: 'Importance Score'
-                        },
-                        height: 500,
-                        margin: { b: 150 }
-                    };
-                    
-                    Plotly.newPlot('param-importance-plot', plotData, layout);
+                    tbodyElement.innerHTML = rows.join('');
+                })
+                .catch(error => {
+                    tbodyElement.innerHTML = `<tr><td colspan="3">Error loading data: ${error}</td></tr>`;
                 });
         }
-
-        // Parallel coordinates visualization
-        function updateParallelCoords() {
-            const phase = document.getElementById('parallel-phase').value;
-            
-            fetch(`/api/parallel_coords/${phase}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        document.getElementById('parallel-coords-plot').innerHTML = 
-                            `<div class="alert alert-warning">${data.error}</div>`;
-                        return;
-                    }
-                    
-                    // Create dimensions array for parallel coords
-                    const dimensions = data.dimensions.map(d => ({
-                        label: d.label,
-                        values: d.values,
-                        range: d.range,
-                        tickvals: d.tickvals,
-                        ticktext: d.ticktext
-                    }));
-                    
-                    // Get the score dimension (last one)
-                    const scoreDim = dimensions[dimensions.length - 1];
-                    const scoreValues = scoreDim.values;
-                    
-                    // Calculate color scale based on score
-                    const minScore = Math.min(...scoreValues);
-                    const maxScore = Math.max(...scoreValues);
-                    const normalizedScores = scoreValues.map(
-                        s => (s - minScore) / (maxScore - minScore)
-                    );
-                    
-                    const plotData = [{
-                        type: 'parcoords',
-                        dimensions: dimensions,
-                        line: {
-                            color: normalizedScores,
-                            colorscale: 'Jet',
-                            showscale: true
-                        }
-                    }];
-                    
-                    const layout = {
-                        title: 'Parameter Relationships (Higher Score = Better)',
-                        height: 600
-                    };
-                    
-                    Plotly.newPlot('parallel-coords-plot', plotData, layout);
-                });
-        }
-
-        // Parameter distribution visualization
-        function populateParamSelect() {
-            const phase = document.getElementById('dist-phase').value;
-            
-            fetch(`/api/param_importance/${phase}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error || !data.trial_data || data.trial_data.length === 0) {
-                        return;
-                    }
-                    
-                    // Get all parameter names
-                    const params = Object.keys(data.trial_data[0].params);
-                    
-                    // Sort parameters by importance if available
-                    let sortedParams = params;
-                    if (data.importances) {
-                        sortedParams = params.sort((a, b) => 
-                            (data.importances[b] || 0) - (data.importances[a] || 0)
-                        );
-                    }
-                    
-                    // Update select options
-                    const paramSelect = document.getElementById('param-select');
-                    paramSelect.innerHTML = '<option value="">Select parameter</option>';
-                    
-                    sortedParams.forEach(param => {
-                        const option = document.createElement('option');
-                        option.value = param;
-                        option.textContent = param;
-                        paramSelect.appendChild(option);
-                    });
-                    
-                    // Set first param if none selected
-                    if (paramSelect.value === "") {
-                        paramSelect.value = sortedParams[0] || "";
-                    }
-                    
-                    // Update distribution plot
-                    updateParamDistribution();
-                });
-        }
-
-        function updateParamDistribution() {
-            const phase = document.getElementById('dist-phase').value;
-            const param = document.getElementById('param-select').value;
-            const topN = document.getElementById('top-n').value;
-            
-            if (!param) return;
-            
-            fetch(`/api/param_importance/${phase}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error || !data.trial_data || data.trial_data.length === 0) {
-                        document.getElementById('param-dist-plot').innerHTML = 
-                            `<div class="alert alert-warning">No data available</div>`;
-                        return;
-                    }
-                    
-                    // Sort trials by score (descending)
-                    const sortedTrials = [...data.trial_data].sort((a, b) => b.value - a.value);
-                    
-                    // Take top N trials or all
-                    const trials = topN === 'all' ? 
-                        sortedTrials : 
-                        sortedTrials.slice(0, parseInt(topN));
-                    
-                    // Get parameter values and scores
-                    const paramValues = trials.map(t => t.params[param]);
-                    const scores = trials.map(t => t.value);
-                    
-                    // Decide on plot type based on parameter values
-                    if (paramValues.every(v => typeof v === 'number')) {
-                        // Numeric parameter - use scatter plot
-                        const plotData = [{
-                            type: 'scatter',
-                            mode: 'markers',
-                            x: paramValues,
-                            y: scores,
-                            marker: {
-                                color: scores,
-                                colorscale: 'Viridis',
-                                size: 12
-                            }
-                        }];
-                        
-                        const layout = {
-                            title: `${param} vs. Performance`,
-                            xaxis: { title: param },
-                            yaxis: { title: 'Score' },
-                            height: 500
-                        };
-                        
-                        Plotly.newPlot('param-dist-plot', plotData, layout);
-                    } else {
-                        // Categorical parameter - use box plots
-                        // Group by parameter value
-                        const groups = {};
-                        trials.forEach(t => {
-                            const val = String(t.params[param]);
-                            if (!groups[val]) groups[val] = [];
-                            groups[val].push(t.value);
-                        });
-                        
-                        const plotData = Object.entries(groups).map(([val, scores]) => ({
-                            type: 'box',
-                            name: val,
-                            y: scores,
-                            boxpoints: 'all',
-                            jitter: 0.3,
-                            pointpos: 0
-                        }));
-                        
-                        const layout = {
-                            title: `Performance by ${param}`,
-                            yaxis: { title: 'Score' },
-                            height: 500
-                        };
-                        
-                        Plotly.newPlot('param-dist-plot', plotData, layout);
-                    }
-                });
-        }
-
-        // Set up event handlers
-        document.getElementById('importance-phase').addEventListener('change', updateParamImportance);
-        document.getElementById('parallel-phase').addEventListener('change', updateParallelCoords);
-        document.getElementById('dist-phase').addEventListener('change', populateParamSelect);
-        document.getElementById('param-select').addEventListener('change', updateParamDistribution);
-        document.getElementById('top-n').addEventListener('change', updateParamDistribution);
-
-        // Initialize visualizations after page load
-        document.addEventListener('DOMContentLoaded', function() {
-            updateParamImportance();
-            updateParallelCoords();
-            populateParamSelect();
-        });
     </script>
 </body>
 </html>
     ''')
 
+# Create template for best runs
+with open('templates/best_runs.html', 'w') as f:
+    f.write('''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Best MLflow Runs</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1>Best MLflow Runs</h1>
+        
+        {% for phase_key, phase_data in best_runs.items() %}
+        <div id="{{ phase_key }}-data" 
+             data-run-name="{{ phase_data.run_name|default('') }}"
+             data-val-f1="{{ phase_data.val_f1|default('') }}">
+            <h3>{{ phase_key|capitalize }}</h3>
+            {% if phase_data.error %}
+                <div class="alert alert-warning">{{ phase_data.error }}</div>
+            {% else %}
+                <p>Best Run: {{ phase_data.run_name|default('Not available') }}</p>
+                <p>F1 Score: {{ phase_data.val_f1|default('Not available') }}</p>
+            {% endif %}
+        </div>
+        <hr>
+        {% endfor %}
+        
+        <a href="/" class="btn btn-primary">Back to Dashboard</a>
+    </div>
+</body>
+</html>
+    ''')
+
 if __name__ == '__main__':
-    print("Starting Optuna Dashboard")
+    print("Starting FCGFormer Optimization Dashboard")
     print(f"Database URL: {OPTUNA_DB_URL}")
     print("Open http://127.0.0.1:5000 in your browser to view the dashboard")
     app.run(debug=True)

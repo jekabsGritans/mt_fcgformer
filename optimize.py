@@ -17,21 +17,6 @@ from dotenv import load_dotenv
 from optimize_suggest_params import suggest_parameters
 from utils.mlflow_utils import configure_mlflow_auth
 
-# ===== OVERRIDE FLAGS FOR DEBUGGING =====
-# Set to True to force specific parts of the model off
-DISABLE_AUX_LOSS = False       # Set all aux loss weights to 0
-FORCE_MASK_RATE = None         # Set to a value between 0.0-1.0 to force a specific mask rate
-                               # or None to use Optuna's suggestion
-
-# Dataset override flags
-DISABLE_NIST_LSER = False      # Force nist_lser_weight to 0
-DISABLE_CHEMMOTION = False     # Force chemmotion_weight to 0
-DISABLE_CHEMMOTION_LSER = False # Force chemmotion_lser_weight to 0
-DISABLE_GRAPHFORMER = False    # Force graphformer_weight to 0
-DISABLE_GRAPHFORMER_LSER = False # Force graphformer_lser_weight to 0
-
-
-
 # Setup logging
 logging.basicConfig(
     level=logging.INFO,
@@ -259,35 +244,6 @@ def monitor_training_process(current_process, training_log, metrics_file, trial,
     logger.warning(f"Trial {trial.number} P{phase} - No metrics file available")
     return best_val_f1
 
-def apply_debugging_overrides(params):
-    """Apply debugging overrides to parameters"""
-    if DISABLE_AUX_LOSS:
-        params["initial_aux_bool_weight"] = 0.0
-        params["initial_aux_float_weight"] = 0.0
-        logger.info("OVERRIDE: Auxiliary loss disabled")
-        
-    if DISABLE_NIST_LSER:
-        params["nist_lser_weight"] = 0.0
-        logger.info("OVERRIDE: NIST LSER dataset disabled")
-        
-    if DISABLE_CHEMMOTION:
-        params["chemmotion_weight"] = 0.0
-        logger.info("OVERRIDE: ChemMotion dataset disabled")
-        
-    if DISABLE_CHEMMOTION_LSER:
-        params["chemmotion_lser_weight"] = 0.0
-        logger.info("OVERRIDE: ChemMotion LSER dataset disabled")
-        
-    if DISABLE_GRAPHFORMER:
-        params["graphformer_weight"] = 0.0
-        logger.info("OVERRIDE: Graphformer dataset disabled")
-        
-    if DISABLE_GRAPHFORMER_LSER:
-        params["graphformer_lser_weight"] = 0.0
-        logger.info("OVERRIDE: Graphformer LSER dataset disabled")
-        
-    return params
-
 def build_training_command(params, phase, metrics_file, trial_number):
     """Build command array for main.py training script"""
 
@@ -421,9 +377,6 @@ def objective(trial):
     
     # Get parameters for current phase
     params = suggest_parameters(trial, phase)
-    
-    # Apply debugging overrides
-    params = apply_debugging_overrides(params)
     
     # Create a unique directory for this trial's files
     trial_metrics_dir = os.path.join("./trials", f"phase{phase}_trial_{trial.number}")

@@ -524,10 +524,7 @@ class StatefulMultiTokenFCGFormer(BaseModel):
         fg_logits = preds["fg_logits"]
         
         # Apply loss only to known labels
-        loss_per_element = F.binary_cross_entropy_with_logits(
-            fg_logits, fg_targets.float(), reduction='none'
-        )
-        fg_loss = (loss_per_element * mask).sum() / (mask.sum() + 1e-10)
+        fg_loss = F.binary_cross_entropy_with_logits(fg_logits, fg_targets.float())
                 
         out["fg_logits"] = fg_logits
         out["fg_loss"] = fg_loss

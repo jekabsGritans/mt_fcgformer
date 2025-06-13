@@ -59,6 +59,11 @@ PHASE1_STUDY_NAME = "stateful_mt_fcgformer-phase1-exploration"
 PHASE2_STUDY_NAME = "stateful_mt_fcgformer-phase2-exploitation"
 PHASE3_STUDY_NAME = "stateful_mt_fcgformer-phase3-validation"
 
+# if DONT_OPTIMIZE env variable is set to true, exit script
+if os.getenv("DONT_OPTIMIZE", "false").lower() == "true":
+    logger.info("Skipping optimization as DONT_OPTIMIZE is set to true")
+    sys.exit(0)
+
 # Global variable to track the current process
 current_process = None
 

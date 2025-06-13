@@ -902,7 +902,7 @@ def cleanup_failed_trials(study_name, db_url, min_value=0.001):
                     
             # Make sure the enqueued trials are processed
             if temp_study.trials:
-                new_study.optimize(lambda trial: temp_study.trials[trial.number].value, n_trials=len(temp_study.trials)) # type: ignore
+                new_study.optimize(lambda trial: temp_study.trials[trial.number].value, n_trials=len(temp_study.trials))
             
             # Delete the temporary study
             optuna.delete_study(study_name=temp_study_name, storage=db_url)
@@ -912,12 +912,14 @@ def cleanup_failed_trials(study_name, db_url, min_value=0.001):
             print("No failed trials to clean up")
             
     except KeyError as e:
-        if "Record does not exist" in str(e):
+        # Handle both old and new error message formats
+        if "Record does not exist" in str(e) or "No such study" in str(e):
             print(f"Study {study_name} does not exist yet. Nothing to clean up.")
         else:
             raise
     except Exception as e:
         print(f"Error cleaning up study {study_name}: {e}")
+
         
 def log_final_results(final_best_params, phase3_value):
     """Log final optimization results to MLflow and save to file"""

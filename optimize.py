@@ -32,7 +32,7 @@ logger = logging.getLogger("optuna_optimization")
 WORKER_ID = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
 
 # Base configuration - central point for derived names
-BASE_NAME = "mt_final_fr"
+BASE_NAME = "mt_final_noaux"
 MODEL_NAME = "mt_fcgformer"  # Model architecture name
 DATASET_ID = "157d4b53c95f4af88ee86fbcc319bce2"
 
@@ -275,11 +275,6 @@ def build_training_command(params, phase, metrics_file, trial_number):
     use_shiftlr = params["use_shiftlr"]
     use_revert = params["use_revert"]
 
-    # Extract auxiliary loss parameters
-    initial_aux_bool_weight = params["initial_aux_bool_weight"]
-    initial_aux_float_weight = params["initial_aux_float_weight"]
-    aux_epochs = params["aux_epochs"]
-    
     # Extract dataset weights
     nist_lser_weight = params["nist_lser_weight"]
     chemmotion_weight = params["chemmotion_weight"]
@@ -304,11 +299,6 @@ def build_training_command(params, phase, metrics_file, trial_number):
         f"trainer.warmup_steps={warmup_steps}",
         f"trainer.scheduler_t0={scheduler_t0}",
         f"trainer.scheduler_tmult={scheduler_tmult}",
-        
-        # Auxiliary loss parameters
-        f"trainer.initial_aux_bool_weight={initial_aux_bool_weight}",
-        f"trainer.initial_aux_float_weight={initial_aux_float_weight}",
-        f"trainer.aux_epochs={aux_epochs}",
         
         # Model params
         f"model.patch_size={patch_size}",

@@ -22,11 +22,6 @@ def suggest_parameters_phase1(trial):
     params["scheduler_t0"] = trial.suggest_int("scheduler_t0", 1, 10)
     params["scheduler_tmult"] = trial.suggest_categorical("scheduler_tmult", [1, 2])
 
-    # Auxiliary loss parameters
-    params["initial_aux_bool_weight"] = trial.suggest_float("initial_aux_bool_weight", 0.01, 1.0, log=True)
-    params["initial_aux_float_weight"] = trial.suggest_float("initial_aux_float_weight", 0.0001, 0.01, log=True)
-    params["aux_epochs"] = trial.suggest_int("aux_epochs", 2, 10)
-    
     # Dataset weights (nist_weight always fixed at 1.0 as baseline)
     params["nist_lser_weight"] = trial.suggest_float("nist_lser_weight", 0.0, 0.5)
     params["chemmotion_weight"] = trial.suggest_float("chemmotion_weight", 0.0, 1.0)
@@ -64,11 +59,10 @@ def suggest_parameters_phase2(trial):
         params = suggest_param_phase2(trial, param, best_params, params)
     
     # For parameters not explicitly chosen, fill with best values from phase 1
-    aux_loss_params = ["initial_aux_bool_weight", "initial_aux_float_weight", "aux_epochs"]
     dataset_weight_params = ["nist_lser_weight", "chemmotion_weight", "chemmotion_lser_weight", 
                             "graphformer_weight", "graphformer_lser_weight"]
     
-    for param in aux_loss_params + dataset_weight_params:
+    for param in dataset_weight_params:
         if param not in params and param in best_params:
             params[param] = best_params[param]
             
@@ -132,32 +126,6 @@ def suggest_param_phase2(trial, param, best_params, params):
     elif param == "dropout_p":
         best_drop = best_params.get("dropout_p")
         params["dropout_p"] = trial.suggest_float("dropout_p", max(0.0, best_drop - 0.1), min(0.5, best_drop + 0.1))
-
-    # Auxiliary loss parameters
-    elif param == "initial_aux_bool_weight":
-        best_weight = best_params.get("initial_aux_bool_weight")
-        params["initial_aux_bool_weight"] = trial.suggest_float(
-            "initial_aux_bool_weight", 
-            max(0.05, best_weight * 0.5), 
-            min(1.0, best_weight * 1.5)
-        )
-        
-    elif param == "initial_aux_float_weight":
-        best_weight = best_params.get("initial_aux_float_weight")
-        params["initial_aux_float_weight"] = trial.suggest_float(
-            "initial_aux_float_weight", 
-            best_weight * 0.5, 
-            best_weight * 2.0, 
-            log=True
-        )
-        
-    elif param == "aux_epochs":
-        best_epochs = best_params.get("aux_epochs")
-        params["aux_epochs"] = trial.suggest_int(
-            "aux_epochs", 
-            max(2, int(best_epochs * 0.7)), 
-            int(best_epochs * 1.3)
-        )
         
     # Dataset weights
     elif param == "nist_lser_weight":
@@ -274,31 +242,6 @@ def suggest_param_phase3(trial, param, best_params, params):
         best_drop = best_params.get("dropout_p")
         params["dropout_p"] = trial.suggest_float("dropout_p", max(0.0, best_drop - 0.05), min(0.5, best_drop + 0.05))
 
-    elif param == "initial_aux_bool_weight":
-        best_weight = best_params.get("initial_aux_bool_weight")
-        params["initial_aux_bool_weight"] = trial.suggest_float(
-            "initial_aux_bool_weight", 
-            max(0.05, best_weight * 0.8), 
-            min(1.0, best_weight * 1.2)
-        )
-    
-    elif param == "initial_aux_float_weight":
-        best_weight = best_params.get("initial_aux_float_weight")
-        params["initial_aux_float_weight"] = trial.suggest_float(
-            "initial_aux_float_weight", 
-            best_weight * 0.7, 
-            best_weight * 1.3, 
-            log=True
-        )
-
-    elif param == "aux_epochs":
-        best_epochs = best_params.get("aux_epochs")
-        params["aux_epochs"] = trial.suggest_int(
-            "aux_epochs", 
-            max(2, int(best_epochs * 0.9)), 
-            int(best_epochs * 1.1)
-        )
-        
     # Dataset weights
     elif param == "nist_lser_weight":
         best_weight = best_params.get("nist_lser_weight")

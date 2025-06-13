@@ -13,7 +13,7 @@ load_dotenv()
 OPTUNA_DB_URL = "mysql+pymysql://user:hu4sie2Aiwee@192.168.6.5:3307/optuna"
 
 # Base configuration - central point for derived names - MATCHES optimize.py
-BASE_NAME = "mt_final_fr"  # Change this to match optimize.py
+BASE_NAME = "mt_final_noaux"  # Change this to match optimize.py
 
 # Study names derived from base name - CONSISTENT with optimize.py
 STUDY_BASE = f"{BASE_NAME}"

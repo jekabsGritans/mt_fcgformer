@@ -10,12 +10,16 @@ from flask import Flask, jsonify, render_template
 
 # Load database configuration
 load_dotenv()
-OPTUNA_DB_URL = os.getenv("OPTUNA_DB_URL", "mysql+pymysql://user:hu4sie2Aiwee@192.168.6.5:3307/optuna")
+OPTUNA_DB_URL = "mysql+pymysql://user:hu4sie2Aiwee@192.168.6.5:3307/optuna"
 
-# Study names from your optimization script
-PHASE1_STUDY_NAME = "fulldata_mt_fcgformer-phase1-exploration"
-PHASE2_STUDY_NAME = "fulldata_mt_fcgformer-phase2-exploitation" 
-PHASE3_STUDY_NAME = "fulldata_mt_fcgformer-phase3-validation"
+# Base configuration - central point for derived names - MATCHES optimize.py
+BASE_NAME = "mt_debug"  # Change this to match optimize.py
+
+# Study names derived from base name - CONSISTENT with optimize.py
+STUDY_BASE = f"{BASE_NAME}"
+STUDY_PHASE1 = f"{STUDY_BASE}-phase1-exploration"
+STUDY_PHASE2 = f"{STUDY_BASE}-phase2-exploitation"
+STUDY_PHASE3 = f"{STUDY_BASE}-phase3-validation"
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -79,9 +83,9 @@ def update_cache():
         
         # Get data for all studies
         cache["data"] = {
-            "phase1": get_study_info(PHASE1_STUDY_NAME),
-            "phase2": get_study_info(PHASE2_STUDY_NAME),
-            "phase3": get_study_info(PHASE3_STUDY_NAME),
+            "phase1": get_study_info(STUDY_PHASE1),
+            "phase2": get_study_info(STUDY_PHASE2),
+            "phase3": get_study_info(STUDY_PHASE3),
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         
@@ -106,9 +110,9 @@ def get_best_trials():
     """Get best trials with detailed info"""
     best_trials = {}
     
-    for phase_name, study_name in [("phase1", PHASE1_STUDY_NAME), 
-                                 ("phase2", PHASE2_STUDY_NAME), 
-                                 ("phase3", PHASE3_STUDY_NAME)]:
+    for phase_name, study_name in [("phase1", STUDY_PHASE1), 
+                                 ("phase2", STUDY_PHASE2), 
+                                 ("phase3", STUDY_PHASE3)]:
         try:
             study = optuna.load_study(study_name=study_name, storage=OPTUNA_DB_URL)
             if study.best_trial:
@@ -127,9 +131,9 @@ def get_best_trials():
 def best_runs():
     best_runs = {}
     for phase, study_name in [
-        (1, PHASE1_STUDY_NAME), 
-        (2, PHASE2_STUDY_NAME), 
-        (3, PHASE3_STUDY_NAME)
+        (1, STUDY_PHASE1), 
+        (2, STUDY_PHASE2), 
+        (3, STUDY_PHASE3)
     ]:
         try:
             study = optuna.load_study(study_name=study_name, storage=OPTUNA_DB_URL)

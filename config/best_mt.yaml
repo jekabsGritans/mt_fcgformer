@@ -1,16 +1,16 @@
-model:
-  name: mt_fcgformer
-  init:
-    _target_: models.mt_fcgformer.MultiTokenFCGFormer
-  spectrum_dim: 1024
-  patch_size: 8
-  embed_dim: 256
-  num_layers: 3
-  expansion_factor: 2
-  n_heads: 4
-  dropout_p: 0.008943099541295144
-metric_output_file: ./trials/phase2_trial_23/metrics.json
-skip_checkpoints: true
+# Set model defaults
+defaults:
+  - model: mt_fcgformer
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
+  - _self_
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+
+# Dataset configuration
 dataset_id: 157d4b53c95f4af88ee86fbcc319bce2
 dataset_name: Shiyi-nist+chemotion+graphormer+rdk+LSER
 fg_names:
@@ -33,12 +33,28 @@ fg_names:
 - nitro
 aux_bool_names: []
 aux_float_names: []
+
+# Dataset weights - just use NIST like the best run
 nist_weight: 1.0
 nist_lser_weight: 0.0
 chemmotion_weight: 0.0
 chemmotion_lser_weight: 0.0
 graphformer_weight: 0.0
 graphformer_lser_weight: 0.0
+
+# Mask rate parameters (not needed for non-stateful model)
+min_mask_rate: 0.0
+max_mask_rate: 0.0
+
+# Override model parameters to match best config
+model:
+  patch_size: 8
+  embed_dim: 256
+  num_layers: 3
+  expansion_factor: 2
+  n_heads: 4
+  dropout_p: 0.008943099541295144
+
 trainer:
   lr: 0.0006779437795864471
   epochs: 200
@@ -49,18 +65,32 @@ trainer:
   warmup_steps: 577
   scheduler_t0: 30
   scheduler_tmult: 2
+  
+  # Add aux parameters (won't be used but needed for config structure)
+  initial_aux_bool_weight: 0.0
+  initial_aux_float_weight: 0.0
+  aux_epochs: 1
+  
   checkpoint_interval_epochs: 2
   log_interval_steps: 100
   validator:
     batch_size: 32
     threshold: 0.5
+
+# Runtime configuration
 mode: train
 checkpoint: null
 device: cuda:0
 runs_path: ./runs
-experiment_name: fcg-mt-best
+experiment_name: fcg-mt-best-replication
+
+# Data augmentation parameters
 use_noise: true
 use_mask: true
 use_shiftud: true
 use_shiftlr: false
 use_revert: true
+
+# Optional debugging parameters
+metric_output_file: null
+skip_checkpoints: false

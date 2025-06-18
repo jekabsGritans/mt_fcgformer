@@ -148,7 +148,7 @@ class PatchEmbed(nn.Module):
         x = self.norm(x)  # Apply layer normalization
         return x
 
-class MultiTokenFCGFormerModuleLearn(NeuralNetworkModule):
+class MultiTokenFCGFormerModule(NeuralNetworkModule):
     """Neural network architecture for FCGFormer with multiple class tokens for multilabel classification"""
 
     def __init__(self, spectrum_dim: int, fg_target_dim: int, aux_bool_target_dim: int, aux_float_target_dim: int,
@@ -172,8 +172,9 @@ class MultiTokenFCGFormerModuleLearn(NeuralNetworkModule):
         # Add 1 for the auxiliary token if needed
         num_aux_tokens = 1 if (aux_bool_target_dim + aux_float_target_dim > 0) else 0
         num_positions = fg_target_dim + num_aux_tokens + self.patch_embed.n_patches
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_positions, embed_dim))
-        nn.init.trunc_normal_(self.pos_embed, std=0.02)
+        self.pos_embed = nn.Parameter(
+            self._create_sinusoidal_embeddings(num_positions, embed_dim)
+        )
         
         # Increase dropout for better regularization
         self.pos_drop = nn.Dropout(p=dropout_p)
@@ -293,8 +294,15 @@ class MultiTokenFCGFormerModuleLearn(NeuralNetworkModule):
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
 
-        nn.init.trunc_normal_(self.pos_embed, std=0.02)
-
+    def _create_sinusoidal_embeddings(self, num_positions, dim):
+        # Create sinusoidal position embeddings like in the original transformer
+        pe = torch.zeros(num_positions, dim)
+        position = torch.arange(0, num_positions).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, dim, 2) * -(math.log(10000.0) / dim))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term[:dim//2]) # handle odd dimensions
+        return pe.unsqueeze(0)
+     
     def get_attention_maps(self):
         """Returns attention maps for visualization"""
         return self.attention_maps
@@ -332,7 +340,7 @@ class MultiTokenFCGFormerModuleLearn(NeuralNetworkModule):
                 
             return token_attentions
 
-class MultiTokenFCGFormerLearn(BaseModel):
+class MultiTokenFCGFormer(BaseModel):
     """
     Implementation of FCGFormer with multiple class tokens for multilabel classification
     """
@@ -345,7 +353,7 @@ class MultiTokenFCGFormerLearn(BaseModel):
         self.spectrum_eval_transform = create_eval_transform()
 
         # Initialize the network
-        self.nn = MultiTokenFCGFormerModuleLearn(
+        self.nn = MultiTokenFCGFormerModule(
             spectrum_dim=cfg.model.spectrum_dim,
             fg_target_dim=len(cfg.fg_names),
             aux_bool_target_dim=len(cfg.aux_bool_names),

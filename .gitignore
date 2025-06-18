@@ -10,3 +10,4 @@ venv/
 **/tmp/
 **/trials/
 templates/
+mlruns/

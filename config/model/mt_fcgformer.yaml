@@ -9,8 +9,8 @@ init:
 spectrum_dim: 1024
 
 patch_size: 16
-embed_dim: 496
-num_layers: 2
-expansion_factor: 4
-n_heads: 8
-dropout_p: 0.18
+embed_dim: 256
+num_layers: 3
+expansion_factor: 2
+n_heads: 4
+dropout_p: 0.05

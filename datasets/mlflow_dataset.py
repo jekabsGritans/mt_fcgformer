@@ -165,10 +165,7 @@ class MLFlowDataset(Dataset):
 
         spectrum = self.spectra[index]
         if self.spectrum_transform is not None:
-            print("Applying spectrum transform")
             spectrum = self.spectrum_transform(spectrum)
-        else:
-            print("No spectrum transform applied")
 
         out["spectrum"] = spectrum # this is pre-interpolated
         out["fg_targets"] = self.fg_targets[index]

@@ -11,3 +11,4 @@ venv/
 **/trials/
 templates/
 mlruns/
+CBL-gui/

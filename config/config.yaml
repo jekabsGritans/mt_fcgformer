@@ -10,6 +10,8 @@ hydra:
     dir: .
   output_subdir: null
 
+deploy_model_name: null
+
 # for optuna
 metric_output_file: null
 skip_checkpoints: false

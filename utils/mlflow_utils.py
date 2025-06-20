@@ -70,9 +70,10 @@ def configure_mlflow_auth():
     This allows connecting to remote MLflow servers that require authentication.
     """
     # Get auth credentials from environment variables
-    tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+    tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
     username = os.getenv("MLFLOW_TRACKING_USERNAME")
     password = os.getenv("MLFLOW_TRACKING_PASSWORD")
+
     
     # Check if authentication is already in the URI
     parsed_uri = urllib.parse.urlparse(tracking_uri)
@@ -82,13 +83,12 @@ def configure_mlflow_auth():
         return
         
     # If credentials are provided, add them to the tracking URI
-    if username and password:
-        # Parse the tracking URI to add authentication
-        
-        # Only add auth for http/https URLs
-        if parsed_uri.scheme in ('http', 'https'):
-            netloc = f"{urllib.parse.quote(username)}:{urllib.parse.quote(password)}@{parsed_uri.netloc}"
-            tracking_uri = parsed_uri._replace(netloc=netloc).geturl()
+    assert username and password, "MLFLOW_TRACKING_USERNAME and MLFLOW_TRACKING_PASSWORD must be set for authentication"
+
+    # Only add auth for http/https URLs
+    if parsed_uri.scheme in ('http', 'https'):
+        netloc = f"{urllib.parse.quote(username)}:{urllib.parse.quote(password)}@{parsed_uri.netloc}"
+        tracking_uri = parsed_uri._replace(netloc=netloc).geturl()
         
     # Set the tracking URI for MLflow
     mlflow.set_tracking_uri(tracking_uri)

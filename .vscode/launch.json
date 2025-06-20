@@ -5,15 +5,68 @@
     "version": "0.2.0",
     "configurations": [
          {
-            "name": "deploy",
+            "name": "deploy nist",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
             "args": [
                 "mode=deploy",
-                "checkpoint=f2b02958227b4c5bba27fd3773b41a4a/best",
-                "experiment_name=deploy_debug"
+                "checkpoint=7d6fcfa3414748119e8d452bffa2e3d3/best",
+                "experiment_name=deploy_working",
+                "deploy_model_name=working_nist"
+            ]
+        },
+        {
+            "name": "deploy chem",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "mode=deploy",
+                "checkpoint=fcae93d1ffad4f79be9c7eba8b96030e/best",
+                "experiment_name=deploy_working",
+                "deploy_model_name=working_chemmotion"
+            ]
+        },
+        {
+            "name": "deploy lser",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "mode=deploy",
+                "checkpoint=f0878864036c40c0be506e6b6dce19f3/best",
+                "experiment_name=deploy_working",
+                "deploy_model_name=working_lser"
+            ]
+        },
+        {
+            "name": "deploy graph",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "mode=deploy",
+                "checkpoint=3e3a731e8f5145879c48f048cf1736f2/best",
+                "experiment_name=deploy_working",
+                "deploy_model_name=working_graphformer"
+            ]
+        },
+        {
+            "name": "deploy combined",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "args": [
+                "mode=deploy",
+                "checkpoint=99b6f602d24a4f5eb26a819e4d21b556/best",
+                "experiment_name=deploy_working",
+                "deploy_model_name=working_combined"
             ]
         },
         {
@@ -36,17 +89,5 @@
                 "graphformer_lser_weight=0.0",
             ]
         },
-        {
-            "name": "deploy",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/main.py",
-            "console": "integratedTerminal",
-            "args": [
-                "mode=deploy",
-                "checkpoint=ef4750cf02cf452ab356e7585d54f04e/best",
-                "experiment_name=debug"
-            ]
-        },       
     ]
 }

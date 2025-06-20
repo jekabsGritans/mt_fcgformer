@@ -1,4 +1,7 @@
+import os
+
 import mlflow
+import torch
 from hydra.utils import instantiate
 from mlflow.tracking import MlflowClient
 from omegaconf import DictConfig, OmegaConf
@@ -32,11 +35,46 @@ def deploy_model_from_config(cfg: DictConfig):
     dataset_name = get_experiment_name_from_run(dataset_id)
 
     # Model is determined by combination of model name and dataset 
-    model_name = f"{train_cfg.model.name}_{dataset_name}"
+    model_name = cfg.deploy_model_name
     mlflow.set_tag("mlflow.runName", f"deploy_{model_name}_{run_id}")
 
+    # Download the checkpoint file
+    checkpoint_path = download_artifact(cfg, run_id, f"{checkpoint_tag}_model.pt")
+    
     # Retrieve model class
     model = instantiate(train_cfg.model.init, cfg=train_cfg, _recursive_=False)
+    
+    # FIX 1: Load the state dict into the model
+    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    model.nn.load_state_dict(state_dict)
+    # FIX 2: Set model to evaluation mode
+    model.nn.eval()
+    
+    # Create artifacts directory for this deployment
+    artifacts_dir = os.path.join(cfg.runs_path, "deploy_artifacts")
+    os.makedirs(artifacts_dir, exist_ok=True)
+    
+    # FIX 3: Save the loaded weights for explicit inclusion in the MLFlow model
+    weights_path = os.path.join(artifacts_dir, "model_weights.pt")
+    torch.save(state_dict, weights_path)
+    
+    # Add a proper load_context method to the model to ensure weights are loaded
+    original_load_context = model.load_context
+    
+    def enhanced_load_context(self, context):
+        # Call original method
+        original_load_context(context)
+        
+        # Explicitly load weights if available
+        if "model_weights" in context.artifacts:
+            weights_path = context.artifacts["model_weights"]
+            if os.path.exists(weights_path):
+                state_dict = torch.load(weights_path, map_location="cpu")
+                self.nn.load_state_dict(state_dict)
+                self.nn.eval()
+    
+    # Add the enhanced method to the model
+    model.load_context = enhanced_load_context.__get__(model, type(model))
 
     model_info = mlflow.pyfunc.log_model(
         artifact_path="model",
@@ -46,6 +84,7 @@ def deploy_model_from_config(cfg: DictConfig):
         input_example=model._input_example,
         registered_model_name=model_name,
         pip_requirements=["-r requirements.txt"],
+        artifacts={"model_weights": weights_path},  # FIX 4: Include weights as explicit artifact
         metadata={
             "checkpoint": cfg.checkpoint,
         }
@@ -78,3 +117,5 @@ def deploy_model_from_config(cfg: DictConfig):
         version=model_info.version,
         description=model._description
     )
+    
+    return model_info

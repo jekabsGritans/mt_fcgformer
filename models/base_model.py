@@ -141,11 +141,3 @@ class BaseModel(PythonModel, ABC):
         Set the functional group names for the model.
         """
         self.fg_names = fg_names
-
-    def load_checkpoint(self, checkpoint_path: str):
-        """
-        Load the model checkpoint.
-        """
-        checkpoint_data = torch.load(checkpoint_path, map_location="cpu")
-        self.nn.load_state_dict(checkpoint_data)
-        self.nn.eval()

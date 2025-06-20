@@ -5,11 +5,16 @@
     "version": "0.2.0",
     "configurations": [
          {
-            "name": "d",
+            "name": "deploy",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
             "console": "integratedTerminal",
+            "args": [
+                "mode=deploy",
+                "checkpoint=f2b02958227b4c5bba27fd3773b41a4a/best",
+                "experiment_name=deploy_debug"
+            ]
         },
         {
             "name": "train",

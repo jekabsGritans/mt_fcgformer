@@ -165,7 +165,10 @@ class MLFlowDataset(Dataset):
 
         spectrum = self.spectra[index]
         if self.spectrum_transform is not None:
+            print("Applying spectrum transform")
             spectrum = self.spectrum_transform(spectrum)
+        else:
+            print("No spectrum transform applied")
 
         out["spectrum"] = spectrum # this is pre-interpolated
         out["fg_targets"] = self.fg_targets[index]
@@ -251,150 +254,56 @@ class MLFlowDatasetAggregator:
                 dataset_name = f"{source_name}_lser" if is_lser else source_name
                 self.datasets[dataset_name] = dataset
         
-    def get_loader(self, batch_size: int) -> GPUBatchSampler | DataLoader:
-        if self.split == "train":
-            # Get dataset weights
-            dataset_weights = {}
-            for name in self.datasets.keys():
-                weight = getattr(self.cfg, f"{name}_weight", 0.0)
-                dataset_weights[name] = weight
-                
-            # Create GPU batch sampler
-            gpu_sampler = GPUBatchSampler(
-                self.datasets, 
-                dataset_weights,
-                batch_size, 
-                device=self.cfg.device
-            )
-            
-            # Return iterator directly (no DataLoader needed)
-            return gpu_sampler
-        else:
-            # For validation, keep current DataLoader
-            combined_dataset = ConcatDataset([self.datasets[name] for name in self.datasets.keys()])
+    def get_loader(self, batch_size: int) -> DataLoader:
+        """
+        Returns a DataLoader for the dataset that samples according to the weights.
+        """
+        # Combine all datasets into a single ConcatDataset
+        all_datasets = list(self.datasets.values())
+        
+        # If only one dataset, no need for weighted sampling
+        if len(all_datasets) == 1:
             return DataLoader(
-                combined_dataset, 
+                all_datasets[0],
                 batch_size=batch_size,
-                shuffle=False,
+                shuffle=True,
+                num_workers=0,
                 pin_memory=False
             )
-
-    
-
-class GPUBatchSampler:
-    """Sample batches directly on GPU for maximum throughput"""
-    def __init__(self, datasets, weights, batch_size, device, epochs_worth=1):
-        self.device = device
-        self.batch_size = batch_size
         
-        # Calculate total samples and weights
-        self.n_samples = sum(len(dataset) for dataset in datasets.values())
-        
-        # Create mapping from flat index to (dataset_name, dataset_idx)
-        self.index_map = []
-        self.dataset_tensors = {}
-        
-        # Pre-calculate weights tensor for all samples
-        all_weights = []
-        
-        for name, dataset in datasets.items():
-            # Get weight for this dataset
-            weight = weights.get(name, 0.0)
-            if weight <= 0.0:
-                continue
+        # Create weights for each dataset according to config
+        dataset_weights = []
+        for name, dataset in self.datasets.items():
+            weight = 1.0  # Default weight
+            if 'nist' in name:
+                if 'lser' in name:
+                    weight = self.cfg.nist_lser_weight
+                else:
+                    weight = self.cfg.nist_weight
+            elif 'chemmotion' in name:
+                weight = self.cfg.chemmotion_weight
+            elif 'graphformer' in name:
+                weight = self.cfg.graphformer_weight
                 
-            # Add dataset to mapping
-            ds_size = len(dataset)
-            self.index_map.extend([(name, i) for i in range(ds_size)])
-            
-            # Store dataset tensors
-            self.dataset_tensors[name] = {
-                "spectrum": dataset.spectra,
-                "fg_targets": dataset.fg_targets
-            }
-            
-            if dataset.aux_bool_targets is not None:
-                self.dataset_tensors[name]["aux_bool_targets"] = dataset.aux_bool_targets
-                
-            if dataset.aux_float_targets is not None:
-                self.dataset_tensors[name]["aux_float_targets"] = dataset.aux_float_targets
-            
-            # Add weights
-            all_weights.extend([weight] * ds_size)
+            # Weight for each sample in this dataset
+            dataset_weights.extend([weight] * len(dataset))
         
-        # Convert weights to tensor for GPU sampling
-        weights_tensor = torch.tensor(all_weights, device=device)
-        self.n_valid_samples = len(weights_tensor)
+        # Create a ConcatDataset
+        concat_dataset = ConcatDataset(all_datasets)
         
-        # Pre-generate multiple epochs worth of batch indices
-        n_batches = self.n_valid_samples // batch_size * epochs_worth
+        # Create a weighted sampler
+        weights_tensor = torch.tensor(dataset_weights, dtype=torch.float)
+        sampler = WeightedRandomSampler(
+            weights=weights_tensor,
+            num_samples=len(weights_tensor),
+            replacement=True
+        )
         
-        # Generate indices using multinomial sampling on GPU
-        self.batches = []
-        for _ in range(n_batches):
-            batch_indices = torch.multinomial(
-                weights_tensor, 
-                batch_size,
-                replacement=True
-            )
-            self.batches.append(batch_indices)
-            
-        self.current_batch = 0
-        
-    def __iter__(self):
-        return self
-        
-    def __next__(self):
-        if self.current_batch >= len(self.batches):
-            # Regenerate batches
-            self.current_batch = 0
-            raise StopIteration
-            
-        indices = self.batches[self.current_batch]
-        batch = {}
-        
-        # Get index mappings for this batch
-        batch_mappings = [self.index_map[i] for i in indices.cpu().numpy()]
-        
-        # Group by dataset for efficient tensor indexing
-        dataset_indices = {}
-        for ds_name, idx in batch_mappings:
-            if ds_name not in dataset_indices:
-                dataset_indices[ds_name] = []
-            dataset_indices[ds_name].append(idx)
-            
-        # Create batch directly using tensor indexing on GPU
-        for key in ["spectrum", "fg_targets"]:
-            tensors_to_stack = []
-            
-            for ds_name, indices in dataset_indices.items():
-                if not indices:
-                    continue
-                    
-                # Convert to tensor
-                idx_tensor = torch.tensor(indices, device=self.device)
-                ds_tensor = self.dataset_tensors[ds_name][key][idx_tensor]
-                tensors_to_stack.append(ds_tensor)
-                
-            batch[key] = torch.cat(tensors_to_stack, dim=0)
-            
-        # Similarly for aux targets
-        for key in ["aux_bool_targets", "aux_float_targets"]:
-            tensors_to_stack = []
-            
-            for ds_name, indices in dataset_indices.items():
-                if not indices or key not in self.dataset_tensors[ds_name]:
-                    continue
-                    
-                idx_tensor = torch.tensor(indices, device=self.device)
-                ds_tensor = self.dataset_tensors[ds_name][key][idx_tensor]
-                tensors_to_stack.append(ds_tensor)
-                
-            if tensors_to_stack:
-                batch[key] = torch.cat(tensors_to_stack, dim=0)
-                
-        self.current_batch += 1
-        return batch
-        
-    def __len__(self):
-        return len(self.batches)
+        # Return DataLoader with the sampler
+        return DataLoader(
+            concat_dataset,
+            batch_size=batch_size,
+            sampler=sampler,
+            num_workers=0,
+            pin_memory=False
+        )

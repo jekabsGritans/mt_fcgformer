@@ -352,6 +352,8 @@ class MultiTokenFCGFormer(BaseModel):
         self.aux_float_names = cfg.aux_float_names
         self.spectrum_eval_transform = create_eval_transform()
 
+        self.spectrum_dim = cfg.model.spectrum_dim
+
         # Initialize the network
         self.nn = MultiTokenFCGFormerModule(
             spectrum_dim=cfg.model.spectrum_dim,
@@ -483,7 +485,7 @@ class MultiTokenFCGFormer(BaseModel):
                 out_probs = []
                 out_targets = []
                 out_attention = []
-                
+
                 for idx, (prob, target) in enumerate(zip(probabilities, self.fg_names)):
                     if prob > threshold:
                         out_probs.append(prob)
@@ -492,15 +494,23 @@ class MultiTokenFCGFormer(BaseModel):
                         # Create attention regions for this target's token
                         if token_attentions is not None and idx < len(token_attentions):
                             target_attention = token_attentions[idx][0].cpu().numpy()  # First batch item
+
+                            if target_attention.max() > target_attention.min():
+                                normalized_attention = (target_attention - target_attention.min()) / (target_attention.max() - target_attention.min())
+                            else:
+                                # If all values are the same, use a default visibility
+                                normalized_attention = np.ones_like(target_attention) * 0.5
+
                             patch_size = self.nn.patch_embed.patch_size
                             num_patches = len(target_attention)
                             
                             # Calculate wavenumber for each patch with this token's attention
                             wavenumbers_per_patch = []
                             for i in range(num_patches):
-                                start_wn = 400 + (i * patch_size)
-                                end_wn = start_wn + patch_size
-                                score = float(target_attention[i])
+                                scaled_patch_size = patch_size * 3600 / self.nn.spectrum_dim 
+                                start_wn = 400 + (i * scaled_patch_size)
+                                end_wn = start_wn + scaled_patch_size
+                                score = float(normalized_attention[i])
                                 wavenumbers_per_patch.append((start_wn, end_wn, score))
                             
                             out_attention.append(wavenumbers_per_patch)

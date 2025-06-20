@@ -61,7 +61,7 @@ trainer:
 
 
 mode: train # mode is set via CLI override (train or test)
-checkpoint: 714e7e7fc2ce487ab3f1bfb3325b5961/best # {run_id}/{checkpoint_tag} e.g. 30925325/best
+checkpoint: null # {run_id}/{checkpoint_tag} e.g. 30925325/best
 
 device: cuda:0
 runs_path: ./runs
